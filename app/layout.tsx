@@ -24,7 +24,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-black text-neutral-100">
         <ServiceWorkerProvider>
           <div className="min-h-screen flex justify-center">
-            <div className="w-full max-w-md px-4 py-6">
+            <div className="w-full max-w-md px-4 pt-6 pb-8 pb-[env(safe-area-inset-bottom)]">
               {children}
             </div>
           </div>

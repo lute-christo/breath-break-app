@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Header } from "@/components/Header";
 import { BreathAnimation } from "@/components/BreathAnimation";
 import { getScriptForEmotion, type Mode } from "@/data/scripts";
@@ -21,7 +21,6 @@ type SessionPageProps = {
 export default function SessionPage({ searchParams }: SessionPageProps) {
   const router = useRouter();
 
-  // Emotion + mode from searchParams (prop-based, no useSearchParams hook)
   const rawEmotion = (searchParams?.emotion || "anxiety").toLowerCase();
   const rawMode = (searchParams?.mode || "standard").toLowerCase() as Mode;
 
@@ -31,19 +30,16 @@ export default function SessionPage({ searchParams }: SessionPageProps) {
   const script = getScriptForEmotion(emotion, mode);
 
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [sessionId, setSessionId] = useState(0); // bump to restart
   const [isPaused, setIsPaused] = useState(false);
   const [endedEarly, setEndedEarly] = useState(false);
-  const [hasLogged, setHasLogged] = useState(false);
-  const [startedAt, setStartedAt] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<string>(
+    () => new Date().toISOString()
+  );
+
+  // useRef instead of state to avoid React's "setState in effect" complaint
+  const hasLoggedRef = useRef(false);
 
   const isFinished = elapsedMs >= SESSION_LENGTH_MS;
-
-  // Capture start time whenever a new sessionId is created
-  useEffect(() => {
-    const now = new Date().toISOString();
-    setStartedAt(now);
-  }, [sessionId]);
 
   // Timer: tick every 100ms while running
   useEffect(() => {
@@ -53,18 +49,18 @@ export default function SessionPage({ searchParams }: SessionPageProps) {
       setElapsedMs((prev) => {
         const next = prev + 100;
         if (next >= SESSION_LENGTH_MS) {
-          return SESSION_LENGTH_MS; // clamp at the end
+          return SESSION_LENGTH_MS;
         }
         return next;
       });
     }, 100);
 
     return () => clearInterval(interval);
-  }, [sessionId, isPaused, isFinished]);
+  }, [isPaused, isFinished]);
 
   // Log once when session finishes (full or early)
   useEffect(() => {
-    if (!isFinished || hasLogged || !startedAt) return;
+    if (!isFinished || hasLoggedRef.current || !startedAt) return;
 
     const durationSec = Math.round(elapsedMs / 1000);
     const completed = !endedEarly && elapsedMs >= SESSION_LENGTH_MS;
@@ -81,16 +77,8 @@ export default function SessionPage({ searchParams }: SessionPageProps) {
         console.error("Failed to log practice session", err);
       });
 
-    setHasLogged(true);
-  }, [
-    isFinished,
-    hasLogged,
-    startedAt,
-    elapsedMs,
-    emotion,
-    mode,
-    endedEarly,
-  ]);
+    hasLoggedRef.current = true;
+  }, [isFinished, startedAt, elapsedMs, emotion, mode, endedEarly]);
 
   // Timer display in MM:SS
   const elapsedSeconds = Math.floor(elapsedMs / 1000);
@@ -110,15 +98,16 @@ export default function SessionPage({ searchParams }: SessionPageProps) {
   const handleEndNow = () => {
     setEndedEarly(true);
     setIsPaused(true);
-    setElapsedMs(SESSION_LENGTH_MS); // flip to finished view & trigger logging
+    setElapsedMs(SESSION_LENGTH_MS);
   };
 
   const handleAnotherRound = () => {
+    // start a fresh round
     setElapsedMs(0);
     setIsPaused(false);
     setEndedEarly(false);
-    setHasLogged(false);
-    setSessionId((prev) => prev + 1);
+    setStartedAt(new Date().toISOString());
+    hasLoggedRef.current = false;
   };
 
   const handleDifferentEmotion = () => {
@@ -126,10 +115,10 @@ export default function SessionPage({ searchParams }: SessionPageProps) {
   };
 
   return (
-    <main className="space-y-6">
+    <main className="space-y-6 pb-4">
       <Header />
 
-      <section className="space-y-4">
+      <section className="space-y-5">
         {/* Top row: emotion + mode pill + timer */}
         <div className="flex items-baseline justify-between">
           <div className="flex items-center gap-2">
@@ -151,7 +140,7 @@ export default function SessionPage({ searchParams }: SessionPageProps) {
           // =====================
           // SESSION COMPLETE VIEW
           // =====================
-          <div className="space-y-4 mt-6">
+          <div className="space-y-4 mt-4">
             <p className="text-base">
               {endedEarly ? (
                 <>
@@ -172,19 +161,19 @@ export default function SessionPage({ searchParams }: SessionPageProps) {
             <div className="space-y-2 mt-4">
               <button
                 onClick={handleAnotherRound}
-                className="w-full py-3 border border-neutral-700 rounded-md text-sm hover:border-neutral-400 active:scale-[0.99] transition"
+                className="w-full py-3.5 border border-neutral-700 rounded-md text-sm hover:border-neutral-400 active:scale-[0.99] transition"
               >
                 Another 3 minutes with {emotion}
               </button>
               <button
                 onClick={handleDifferentEmotion}
-                className="w-full py-3 border border-neutral-700 rounded-md text-sm hover:border-neutral-400 active:scale-[0.99] transition"
+                className="w-full py-3.5 border border-neutral-700 rounded-md text-sm hover:border-neutral-400 active:scale-[0.99] transition"
               >
                 Choose a different emotion
               </button>
             </div>
 
-            <p className="text-[0.7rem] text-neutral-500 mt-2">
+            <p className="text-[0.75rem] text-neutral-500 mt-3">
               You can always come back to this one. Every round is another rep.
             </p>
           </div>
@@ -194,31 +183,33 @@ export default function SessionPage({ searchParams }: SessionPageProps) {
           // ====================
           <>
             {/* Breath animation driven by elapsedMs */}
-            <BreathAnimation elapsedMs={elapsedMs} />
+            <div className="mt-2">
+              <BreathAnimation elapsedMs={elapsedMs} />
+            </div>
 
             {/* Script prompt */}
-            <div className="space-y-1 mt-2">
+            <div className="space-y-1 mt-3">
               <p className="text-xs text-neutral-500">{currentLine.label}</p>
               <p className="text-base leading-relaxed">{currentLine.text}</p>
             </div>
 
             {/* Controls: pause / end */}
-            <div className="flex items-center gap-2 mt-4">
+            <div className="flex items-center gap-3 mt-5">
               <button
                 onClick={handlePauseResume}
-                className="flex-1 py-2 border border-neutral-700 rounded-md text-xs hover:border-neutral-400 active:scale-[0.99] transition"
+                className="flex-1 py-3 border border-neutral-700 rounded-md text-sm hover:border-neutral-400 active:scale-[0.99] transition"
               >
                 {isPaused ? "Resume //" : "Pause //"}
               </button>
               <button
                 onClick={handleEndNow}
-                className="flex-1 py-2 border border-neutral-800 rounded-md text-xs text-neutral-400 hover:border-red-600 hover:text-red-400 active:scale-[0.99] transition"
+                className="flex-1 py-3 border border-neutral-800 rounded-md text-sm text-neutral-300 hover:border-red-600 hover:text-red-400 active:scale-[0.99] transition"
               >
                 End session
               </button>
             </div>
 
-            <p className="text-[0.7rem] text-neutral-500 mt-2">
+            <p className="text-[0.75rem] text-neutral-500 mt-3">
               You can pause or end at any time. The breath doesn&apos;t have to
               be perfect.
             </p>
