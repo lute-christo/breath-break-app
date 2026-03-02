@@ -70,8 +70,9 @@ export default function HomePage() {
 
       {/* Today’s Practice + Mode Toggle */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          {/* Left: title + copy + stats */}
+          <div className="min-w-0">
             <h1 className="text-lg font-semibold">Today&apos;s Practice</h1>
             <p className="text-sm text-neutral-300">
               Turn toward the thing you&apos;re avoiding.
@@ -79,7 +80,7 @@ export default function HomePage() {
 
             {!loading && summary && (
               <div className="mt-2 text-[0.7rem] text-neutral-400 space-y-1">
-                <p>
+                <p className="break-words">
                   <span className="font-mono text-neutral-100">
                     {totalSessions}
                   </span>{" "}
@@ -116,38 +117,39 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* Mode toggle */}
-          <div className="flex items-center text-[0.7rem] border border-neutral-700 rounded-full overflow-hidden">
-            <button
-              onClick={() => setMode("standard")}
-              className={`px-3 py-1 uppercase tracking-[0.15em] ${
-                mode === "standard"
-                  ? "bg-neutral-200 text-black"
-                  : "text-neutral-400"
-              }`}
-            >
-              Standard
-            </button>
-            <button
-              onClick={() => setMode("hardcore")}
-              className={`px-3 py-1 uppercase tracking-[0.15em] ${
-                mode === "hardcore"
-                  ? "bg-red-600 text-white"
-                  : "text-neutral-400"
-              }`}
-            >
-              Hardcore
-            </button>
+          {/* Right: mode toggle pill */}
+          <div className="flex justify-start sm:justify-end">
+            <div className="inline-flex items-center text-[0.7rem] border border-neutral-700 rounded-full overflow-hidden shrink-0">
+              <button
+                onClick={() => setMode("standard")}
+                className={`px-3 py-1 uppercase tracking-[0.15em] ${
+                  mode === "standard"
+                    ? "bg-neutral-200 text-black"
+                    : "text-neutral-400"
+                }`}
+              >
+                Standard
+              </button>
+              <button
+                onClick={() => setMode("hardcore")}
+                className={`px-3 py-1 uppercase tracking-[0.15em] ${
+                  mode === "hardcore"
+                    ? "bg-red-600 text-white"
+                    : "text-neutral-400"
+                }`}
+              >
+                Hardcore
+              </button>
+            </div>
           </div>
         </div>
 
         <BreathButton mode={mode} />
-         <InstallPrompt />
       </section>
 
       {/* Quick start + catalog link */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-medium text-neutral-200">Quick Start</h2>
 
           <button
