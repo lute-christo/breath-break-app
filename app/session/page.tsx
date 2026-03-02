@@ -1,52 +1,49 @@
 "use client";
 
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Header } from "@/components/Header";
 import { BreathAnimation } from "@/components/BreathAnimation";
 import { getScriptForEmotion, type Mode } from "@/data/scripts";
-import { logSession } from "@/lib/localStats";
 import { practiceStore } from "@/lib/practiceStore";
-import { usePracticeData } from "@/hooks/usePracticeData";
 
 const SESSION_LENGTH_SECONDS = 180; // 3 minutes
 const SESSION_LENGTH_MS = SESSION_LENGTH_SECONDS * 1000; // 180,000 ms
 const PHASE_MS = 8_000; // 8s per script line/phase
 
-function formatDuration(seconds: number) {
-  const s = Math.max(0, seconds);
-  const mPart = Math.floor(s / 60);
-  const sPart = s % 60;
-  return `${mPart}:${sPart.toString().padStart(2, "0")}`;
-}
+type SessionPageProps = {
+  searchParams?: {
+    emotion?: string;
+    mode?: string;
+  };
+};
 
-export default function SessionPage() {
-  const searchParams = useSearchParams();
+export default function SessionPage({ searchParams }: SessionPageProps) {
   const router = useRouter();
+
+  // Emotion + mode from searchParams (prop-based, no useSearchParams hook)
+  const rawEmotion = (searchParams?.emotion || "anxiety").toLowerCase();
+  const rawMode = (searchParams?.mode || "standard").toLowerCase() as Mode;
+
+  const emotion = rawEmotion;
+  const mode: Mode = rawMode === "hardcore" ? "hardcore" : "standard";
+
+  const script = getScriptForEmotion(emotion, mode);
 
   const [elapsedMs, setElapsedMs] = useState(0);
   const [sessionId, setSessionId] = useState(0); // bump to restart
   const [isPaused, setIsPaused] = useState(false);
   const [endedEarly, setEndedEarly] = useState(false);
   const [hasLogged, setHasLogged] = useState(false);
-  const [startedAt, setStartedAt] = useState<string>(() =>
-    new Date().toISOString()
-  );
-  const [finalDurationSec, setFinalDurationSec] = useState<number | null>(null);
-
-  // Emotion + mode from query params
-  const rawEmotion = searchParams.get("emotion") || "anxiety";
-  const rawMode = (searchParams.get("mode") || "standard").toLowerCase() as Mode;
-
-  const emotion = rawEmotion.toLowerCase();
-  const mode: Mode = rawMode === "hardcore" ? "hardcore" : "standard";
-
-  const script = getScriptForEmotion(emotion, mode);
+  const [startedAt, setStartedAt] = useState<string | null>(null);
 
   const isFinished = elapsedMs >= SESSION_LENGTH_MS;
 
-  // Practice summary for completion screen
-  const { summary } = usePracticeData();
+  // Capture start time whenever a new sessionId is created
+  useEffect(() => {
+    const now = new Date().toISOString();
+    setStartedAt(now);
+  }, [sessionId]);
 
   // Timer: tick every 100ms while running
   useEffect(() => {
@@ -65,20 +62,13 @@ export default function SessionPage() {
     return () => clearInterval(interval);
   }, [sessionId, isPaused, isFinished]);
 
-  // Helper: log session once (localStats + practiceStore)
-  const logSessionOnce = (opts: { early: boolean; finalElapsedMs: number }) => {
-    if (hasLogged) return;
+  // Log once when session finishes (full or early)
+  useEffect(() => {
+    if (!isFinished || hasLogged || !startedAt) return;
 
-    const { early, finalElapsedMs } = opts;
-    const durationSec = Math.floor(finalElapsedMs / 1000);
-    const completed = !early && durationSec >= SESSION_LENGTH_SECONDS;
+    const durationSec = Math.round(elapsedMs / 1000);
+    const completed = !endedEarly && elapsedMs >= SESSION_LENGTH_MS;
 
-    setFinalDurationSec(durationSec);
-
-    // Legacy aggregate stats
-    logSession(emotion);
-
-    // Rich per-session log
     practiceStore
       .logSession({
         emotion,
@@ -87,23 +77,22 @@ export default function SessionPage() {
         durationSec,
         completed,
       })
-      .catch(() => {
-        // swallow errors for now
+      .catch((err) => {
+        console.error("Failed to log practice session", err);
       });
 
     setHasLogged(true);
-  };
+  }, [
+    isFinished,
+    hasLogged,
+    startedAt,
+    elapsedMs,
+    emotion,
+    mode,
+    endedEarly,
+  ]);
 
-  // Log once when session finishes naturally (full 3 minutes)
-  useEffect(() => {
-    if (!isFinished || hasLogged) return;
-
-    // Natural completion: use full session length
-    logSessionOnce({ early: false, finalElapsedMs: SESSION_LENGTH_MS });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFinished, hasLogged]);
-
-  // Timer display in MM:SS (live)
+  // Timer display in MM:SS
   const elapsedSeconds = Math.floor(elapsedMs / 1000);
   const minutes = Math.floor(elapsedSeconds / 60)
     .toString()
@@ -119,13 +108,9 @@ export default function SessionPage() {
   };
 
   const handleEndNow = () => {
-    // Log with the *actual* elapsed time before we jump to finished view
-    logSessionOnce({ early: true, finalElapsedMs: elapsedMs });
-
     setEndedEarly(true);
     setIsPaused(true);
-    // Move to finished view; logging already happened with real duration
-    setElapsedMs(SESSION_LENGTH_MS);
+    setElapsedMs(SESSION_LENGTH_MS); // flip to finished view & trigger logging
   };
 
   const handleAnotherRound = () => {
@@ -133,21 +118,12 @@ export default function SessionPage() {
     setIsPaused(false);
     setEndedEarly(false);
     setHasLogged(false);
-    setFinalDurationSec(null);
     setSessionId((prev) => prev + 1);
-    setStartedAt(new Date().toISOString());
   };
 
   const handleDifferentEmotion = () => {
     router.push(`/modules?mode=${encodeURIComponent(mode)}`);
   };
-
-  const completionDuration =
-    finalDurationSec ?? (endedEarly ? elapsedSeconds : SESSION_LENGTH_SECONDS);
-
-  const totalSessions = summary?.totalSessions ?? null;
-  const totalMinutes = summary?.totalMinutes ?? null;
-  const streakDays = summary?.streakDays ?? null;
 
   return (
     <main className="space-y-6">
@@ -189,43 +165,7 @@ export default function SessionPage() {
                 </>
               )}
             </p>
-
             <p className="text-sm text-neutral-300">
-              Actual time:{" "}
-              <span className="font-mono">
-                {formatDuration(completionDuration)}
-              </span>{" "}
-              {endedEarly && (
-                <span className="text-amber-400 text-xs">(ended early)</span>
-              )}
-            </p>
-
-            {summary && (
-              <div className="text-[0.7rem] text-neutral-500 space-y-1 mt-2">
-                <p>
-                  Lifetime:{" "}
-                  <span className="font-mono text-neutral-100">
-                    {totalSessions}
-                  </span>{" "}
-                  session{totalSessions === 1 ? "" : "s"},{" "}
-                  <span className="font-mono text-neutral-100">
-                    {totalMinutes}
-                  </span>{" "}
-                  minute{(totalMinutes ?? 0) === 1 ? "" : "s"} total.
-                </p>
-                {streakDays !== null && (
-                  <p>
-                    Current streak:{" "}
-                    <span className="font-mono text-neutral-100">
-                      {streakDays}
-                    </span>{" "}
-                    day{streakDays === 1 ? "" : "s"} in a row.
-                  </p>
-                )}
-              </div>
-            )}
-
-            <p className="text-sm text-neutral-300 mt-2">
               Notice what&apos;s different now, even if it&apos;s subtle.
             </p>
 
