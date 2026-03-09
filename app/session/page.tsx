@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Header } from "@/components/Header";
 import { BreathAnimation } from "@/components/BreathAnimation";
 import { getScriptForEmotion, type Mode } from "@/data/scripts";
@@ -11,7 +11,7 @@ const SESSION_LENGTH_SECONDS = 180; // 3 minutes
 const SESSION_LENGTH_MS = SESSION_LENGTH_SECONDS * 1000; // 180,000 ms
 const PHASE_MS = 8_000; // 8s per script line/phase
 
-export default function SessionPage() {
+function SessionInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -211,5 +211,13 @@ export default function SessionPage() {
         )}
       </section>
     </main>
+  );
+}
+
+export default function SessionPage() {
+  return (
+    <Suspense>
+      <SessionInner />
+    </Suspense>
   );
 }
