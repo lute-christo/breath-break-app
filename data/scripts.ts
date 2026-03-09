@@ -437,6 +437,66 @@ const SCRIPTS: EmotionScript[] = [
   },
 
   // =====================
+  // RESTLESS
+  // =====================
+
+  // STANDARD
+  {
+    emotion: "restless",
+    mode: "standard",
+    lines: [
+      {
+        phase: "inhale",
+        label: "INHALE //",
+        text: "Breathe into the itch, the can't-sit-still, the body that wants to be somewhere else.",
+      },
+      {
+        phase: "hold",
+        label: "HOLD //",
+        text: "Let the squirm stack up without scratching it. The urge gets to be here too.",
+      },
+      {
+        phase: "exhale",
+        label: "EXHALE //",
+        text: "Give the excess charge somewhere to drain. You don't have to solve the itch to release it.",
+      },
+      {
+        phase: "hold",
+        label: "HOLD //",
+        text: "Pause in the stillness you thought you couldn't stand. You're still in one piece.",
+      },
+    ],
+  },
+
+  // HARDCORE
+  {
+    emotion: "restless",
+    mode: "hardcore",
+    lines: [
+      {
+        phase: "inhale",
+        label: "INHALE //",
+        text: "Suck the crawling-out-of-your-skin feeling straight into your lungs instead of running from it.",
+      },
+      {
+        phase: "hold",
+        label: "HOLD //",
+        text: "Let the itch burn without reaching for your phone, the fridge, anything. Just the itch.",
+      },
+      {
+        phase: "exhale",
+        label: "EXHALE //",
+        text: "Dump the fidget, the loop, the unearned urgency out with the air.",
+      },
+      {
+        phase: "hold",
+        label: "HOLD //",
+        text: "Stay in the stillness you've been sprinting from. Nothing here is going to eat you.",
+      },
+    ],
+  },
+
+  // =====================
   // NUMBNESS
   // =====================
 

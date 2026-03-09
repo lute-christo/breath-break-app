@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import type { Mode } from "@/data/scripts";
 
-const QUICK_EMOTIONS = ["anxiety", "anger", "grief"];
+const QUICK_EMOTIONS = ["anxiety", "anger", "grief", "restless"];
 
 interface EmotionGridProps {
   mode: Mode;
