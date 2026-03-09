@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Header } from "@/components/Header";
 import { BreathAnimation } from "@/components/BreathAnimation";
@@ -11,18 +11,12 @@ const SESSION_LENGTH_SECONDS = 180; // 3 minutes
 const SESSION_LENGTH_MS = SESSION_LENGTH_SECONDS * 1000; // 180,000 ms
 const PHASE_MS = 8_000; // 8s per script line/phase
 
-type SessionPageProps = {
-  searchParams?: {
-    emotion?: string;
-    mode?: string;
-  };
-};
-
-export default function SessionPage({ searchParams }: SessionPageProps) {
+export default function SessionPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const rawEmotion = (searchParams?.emotion || "anxiety").toLowerCase();
-  const rawMode = (searchParams?.mode || "standard").toLowerCase() as Mode;
+  const rawEmotion = (searchParams.get("emotion") || "anxiety").toLowerCase();
+  const rawMode = (searchParams.get("mode") || "standard").toLowerCase() as Mode;
 
   const emotion = rawEmotion;
   const mode: Mode = rawMode === "hardcore" ? "hardcore" : "standard";
