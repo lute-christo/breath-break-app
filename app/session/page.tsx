@@ -8,20 +8,6 @@ import { getScriptForEmotion, type Mode } from "@/data/scripts";
 import { practiceStore } from "@/lib/practiceStore";
 import { getSettings } from "@/lib/settingsStore";
 
-// Musical notes per phase: C2, E2, A1, G1 (two octaves below original)
-// Inhale (gathering) → Hold full (present) → Exhale (releasing) → Hold empty (low)
-const PHASE_FREQS = [65.41, 82.41, 55.0, 49.0];
-
-// Harmonic partials with individual decay rates — higher partials die faster,
-// leaving the fundamental to sustain like a real piano string
-const PIANO_PARTIALS = [
-  { ratio: 1, gain: 0.50, decay: 8.0 }, // fundamental — long sustain
-  { ratio: 2, gain: 0.22, decay: 4.5 }, // octave
-  { ratio: 3, gain: 0.12, decay: 2.8 }, // fifth
-  { ratio: 4, gain: 0.06, decay: 1.8 }, // two octaves
-  { ratio: 5, gain: 0.03, decay: 1.0 }, // major third — brief brightness
-];
-
 function hapticPulse() {
   if (typeof navigator !== "undefined" && navigator.vibrate) {
     navigator.vibrate(50);
@@ -34,26 +20,44 @@ function hapticComplete() {
   }
 }
 
-function playTone(audioCtx: AudioContext, fundamental: number) {
+function playThud(audioCtx: AudioContext) {
   const now = audioCtx.currentTime;
 
-  for (const { ratio, gain, decay } of PIANO_PARTIALS) {
-    const osc = audioCtx.createOscillator();
-    const oscGain = audioCtx.createGain();
-    osc.connect(oscGain);
-    oscGain.connect(audioCtx.destination);
+  // Sub-bass body: pitch sweeps 120Hz → 45Hz in 60ms, decays over ~350ms
+  const body = audioCtx.createOscillator();
+  const bodyGain = audioCtx.createGain();
+  body.connect(bodyGain);
+  bodyGain.connect(audioCtx.destination);
 
-    osc.type = "sine";
-    osc.frequency.value = fundamental * ratio;
+  body.type = "sine";
+  body.frequency.setValueAtTime(120, now);
+  body.frequency.exponentialRampToValueAtTime(45, now + 0.06);
 
-    // 3ms hammer attack, then exponential decay per partial
-    oscGain.gain.setValueAtTime(0, now);
-    oscGain.gain.linearRampToValueAtTime(gain, now + 0.003);
-    oscGain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+  bodyGain.gain.setValueAtTime(1.0, now);
+  bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
 
-    osc.start(now);
-    osc.stop(now + decay + 0.1);
+  body.start(now);
+  body.stop(now + 0.4);
+
+  // Brief noise transient: the "click" of the hit
+  const clickDuration = audioCtx.sampleRate * 0.018; // 18ms
+  const buffer = audioCtx.createBuffer(1, clickDuration, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < clickDuration; i++) {
+    data[i] = Math.random() * 2 - 1;
   }
+
+  const click = audioCtx.createBufferSource();
+  click.buffer = buffer;
+
+  const clickGain = audioCtx.createGain();
+  click.connect(clickGain);
+  clickGain.connect(audioCtx.destination);
+
+  clickGain.gain.setValueAtTime(0.35, now);
+  clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.018);
+
+  click.start(now);
 }
 
 const PHASE_MS = 8_000;
@@ -141,7 +145,7 @@ function SessionInner() {
     if (sessionSettings.audioEnabled) {
       const ctx = getAudioCtx();
       if (ctx) {
-        const play = () => playTone(ctx, PHASE_FREQS[lineIndex % PHASE_FREQS.length]);
+        const play = () => playThud(ctx);
         if (ctx.state === "suspended") {
           ctx.resume().then(play).catch(() => {});
         } else {
