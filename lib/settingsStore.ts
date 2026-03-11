@@ -14,7 +14,7 @@ const STORAGE_KEY = "breathbreak_settings_v1";
 
 const DEFAULTS: AppSettings = {
   hapticEnabled: true,
-  audioEnabled: true,
+  audioEnabled: false,
   reminderEnabled: false,
   reminderTime: "08:00",
   sessionLengthMinutes: 3,

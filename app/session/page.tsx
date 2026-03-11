@@ -60,24 +60,20 @@ function playBreath(
   gainNode.connect(audioCtx.destination);
 
   if (isInhale) {
-    // Filter sweeps up — throat and chest opening as air comes in
+    // Filter sweeps up — air coming in
     bandpass.frequency.setValueAtTime(350, now);
     bandpass.frequency.exponentialRampToValueAtTime(1400, now + duration);
-    // Amplitude: rises quickly, holds, fades at the end
-    gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(0.18, now + 0.4);
-    gainNode.gain.setValueAtTime(0.18, now + duration - 0.6);
-    gainNode.gain.linearRampToValueAtTime(0, now + duration);
   } else {
-    // Exhale: filter sweeps down — air leaving
+    // Filter sweeps down — air leaving
     bandpass.frequency.setValueAtTime(1400, now);
     bandpass.frequency.exponentialRampToValueAtTime(350, now + duration);
-    // Amplitude: immediate, steady, fades out
-    gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(0.18, now + 0.2);
-    gainNode.gain.setValueAtTime(0.18, now + duration - 0.8);
-    gainNode.gain.linearRampToValueAtTime(0, now + duration);
   }
+
+  // Steady low volume — quick fade in, hold level, tiny fade out to avoid click
+  gainNode.gain.setValueAtTime(0, now);
+  gainNode.gain.linearRampToValueAtTime(0.07, now + 0.3);
+  gainNode.gain.setValueAtTime(0.07, now + duration - 0.1);
+  gainNode.gain.linearRampToValueAtTime(0, now + duration);
 
   noise.start(now);
   noise.stop(now + duration + 0.1);
