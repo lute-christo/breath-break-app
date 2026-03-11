@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { Onboarding } from "@/components/Onboarding";
 import { Header } from "@/components/Header";
 import { BreathButton } from "@/components/BreathButton";
 import { EmotionGrid } from "@/components/EmotionGrid";
@@ -39,6 +40,17 @@ function streakLine(streakDays: number) {
 
 export default function HomePage() {
   const [mode, setMode] = useState<Mode>("standard");
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const done = localStorage.getItem("breathbreak_onboarded");
+    setOnboarded(!!done);
+  }, []);
+
+  const handleOnboardingDone = () => {
+    localStorage.setItem("breathbreak_onboarded", "1");
+    setOnboarded(true);
+  };
 
   const isDev = process.env.NODE_ENV === "development";
 
@@ -59,6 +71,9 @@ export default function HomePage() {
     // simplest way to refresh the hook data
     window.location.reload();
   };
+
+  if (onboarded === null) return null;
+  if (!onboarded) return <Onboarding onDone={handleOnboardingDone} />;
 
   return (
     <main className="space-y-8 pb-16">
