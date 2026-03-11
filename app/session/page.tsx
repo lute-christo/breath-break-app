@@ -8,18 +8,19 @@ import { getScriptForEmotion, type Mode } from "@/data/scripts";
 import { practiceStore } from "@/lib/practiceStore";
 import { getSettings } from "@/lib/settingsStore";
 
-// Fundamental frequencies per phase: inhale, hold-full, exhale, hold-empty
-// Lower register — grounding rather than alerting
-const PHASE_FREQS = [256, 320, 213, 192];
+// Musical notes per phase: C4, E4, A3, G3
+// Inhale (gathering) → Hold full (present) → Exhale (releasing) → Hold empty (low)
+const PHASE_FREQS = [261.63, 329.63, 220, 196];
 
-// Inharmonic overtone ratios characteristic of a struck metal bowl
-const BOWL_OVERTONES = [
-  { ratio: 1,    gain: 0.55 },
-  { ratio: 2.76, gain: 0.25 },
-  { ratio: 5.40, gain: 0.08 },
+// Harmonic partials with individual decay rates — higher partials die faster,
+// leaving the fundamental to sustain like a real piano string
+const PIANO_PARTIALS = [
+  { ratio: 1, gain: 0.50, decay: 4.0 }, // fundamental — longest sustain
+  { ratio: 2, gain: 0.22, decay: 2.2 }, // octave
+  { ratio: 3, gain: 0.12, decay: 1.4 }, // fifth
+  { ratio: 4, gain: 0.06, decay: 0.9 }, // two octaves
+  { ratio: 5, gain: 0.03, decay: 0.5 }, // major third — brief brightness
 ];
-
-const BOWL_DECAY = 2.8; // seconds — long ring-out
 
 function hapticPulse() {
   if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -36,33 +37,22 @@ function hapticComplete() {
 function playTone(audioCtx: AudioContext, fundamental: number) {
   const now = audioCtx.currentTime;
 
-  // Warm low-pass filter — removes harshness above ~1.4kHz
-  const filter = audioCtx.createBiquadFilter();
-  filter.type = "lowpass";
-  filter.frequency.value = 1400;
-  filter.Q.value = 0.7;
-  filter.connect(audioCtx.destination);
-
-  // Master envelope: fast strike transient → slow exponential decay
-  const master = audioCtx.createGain();
-  master.connect(filter);
-  master.gain.setValueAtTime(0, now);
-  master.gain.linearRampToValueAtTime(0.3, now + 0.008); // sharp strike
-  master.gain.exponentialRampToValueAtTime(0.0001, now + BOWL_DECAY);
-
-  // Stack inharmonic partials
-  for (const { ratio, gain } of BOWL_OVERTONES) {
+  for (const { ratio, gain, decay } of PIANO_PARTIALS) {
     const osc = audioCtx.createOscillator();
     const oscGain = audioCtx.createGain();
     osc.connect(oscGain);
-    oscGain.connect(master);
+    oscGain.connect(audioCtx.destination);
 
     osc.type = "sine";
     osc.frequency.value = fundamental * ratio;
-    oscGain.gain.value = gain;
+
+    // 3ms hammer attack, then exponential decay per partial
+    oscGain.gain.setValueAtTime(0, now);
+    oscGain.gain.linearRampToValueAtTime(gain, now + 0.003);
+    oscGain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
 
     osc.start(now);
-    osc.stop(now + BOWL_DECAY + 0.1);
+    osc.stop(now + decay + 0.1);
   }
 }
 
