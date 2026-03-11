@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { BreathButton } from "@/components/BreathButton";
 import { EmotionGrid } from "@/components/EmotionGrid";
+import { ALL_EMOTIONS } from "@/data/scripts";
 import type { Mode } from "@/data/scripts";
 import { usePracticeData } from "@/hooks/usePracticeData";
 import { practiceStore } from "@/lib/practiceStore";
@@ -38,7 +38,6 @@ function streakLine(streakDays: number) {
 }
 
 export default function HomePage() {
-  const router = useRouter();
   const [mode, setMode] = useState<Mode>("standard");
 
   const isDev = process.env.NODE_ENV === "development";
@@ -54,10 +53,6 @@ export default function HomePage() {
   const suggestedEmotion = summary
     ? pickSuggestedEmotion(summary.byEmotion)
     : null;
-
-  const handleBrowseAll = () => {
-    router.push(`/modules?mode=${encodeURIComponent(mode)}`);
-  };
 
   const handleDevReset = async () => {
     await practiceStore.resetAll();
@@ -148,20 +143,10 @@ export default function HomePage() {
         <BreathButton mode={mode} />
       </section>
 
-      {/* Quick start + catalog link */}
+      {/* Emotion grid */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium text-neutral-200">Quick Start</h2>
-
-          <button
-            onClick={handleBrowseAll}
-            className="text-[0.7rem] text-neutral-400 hover:text-neutral-200 underline underline-offset-4"
-          >
-            Browse all emotions
-          </button>
-        </div>
-
-        <EmotionGrid mode={mode} />
+        <h2 className="text-sm font-medium text-neutral-200">Choose an emotion</h2>
+        <EmotionGrid mode={mode} emotions={ALL_EMOTIONS} />
       </section>
 
       {/* Stats footer + history link */}
