@@ -10,6 +10,7 @@ import type { Mode } from "@/data/scripts";
 import { usePracticeData } from "@/hooks/usePracticeData";
 import { practiceStore } from "@/lib/practiceStore";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { BottomNav } from "@/components/BottomNav";
 
 function pickSuggestedEmotion(byEmotion: Record<string, number>): string | null {
   const emotions = Object.keys(byEmotion);
@@ -65,7 +66,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="space-y-8">
+    <main className="space-y-8 pb-16">
       <Header />
 
       {/* Today’s Practice + Mode Toggle */}
@@ -206,6 +207,8 @@ export default function HomePage() {
           )}
         </div>
       </section>
+
+      <BottomNav />
     </main>
   );
 }

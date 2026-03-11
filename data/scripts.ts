@@ -557,6 +557,18 @@ const SCRIPTS: EmotionScript[] = [
   },
 ];
 
+export const ALL_EMOTIONS = [
+  "anxiety",
+  "anger",
+  "grief",
+  "shame",
+  "jealousy",
+  "loneliness",
+  "exhaustion",
+  "restless",
+  "numbness",
+];
+
 export function getScriptForEmotion(
   emotion: string,
   mode: Mode = "standard"

@@ -7,9 +7,10 @@ const QUICK_EMOTIONS = ["anxiety", "anger", "grief", "restless"];
 
 interface EmotionGridProps {
   mode: Mode;
+  emotions?: string[];
 }
 
-export function EmotionGrid({ mode }: EmotionGridProps) {
+export function EmotionGrid({ mode, emotions = QUICK_EMOTIONS }: EmotionGridProps) {
   const router = useRouter();
 
   const handleSelect = (emotion: string) => {
@@ -22,7 +23,7 @@ export function EmotionGrid({ mode }: EmotionGridProps) {
 
   return (
     <div className="grid grid-cols-3 gap-2 text-sm">
-      {QUICK_EMOTIONS.map((emotion) => (
+      {emotions.map((emotion) => (
         <button
           key={emotion}
           onClick={() => handleSelect(emotion)}
