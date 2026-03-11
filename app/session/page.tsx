@@ -21,16 +21,13 @@ function hapticComplete() {
 }
 
 // Returns the noise source so the caller can stop it early (e.g. on pause).
-// Hold phases (1, 3) return null — silence is correct there, nothing is moving.
+// Phase 0 = inhale, 1 = hold full, 2 = exhale, 3 = hold empty
 function playBreath(
   audioCtx: AudioContext,
   phase: number
-): AudioBufferSourceNode | null {
-  if (phase === 1 || phase === 3) return null;
-
-  const isInhale = phase === 0;
+): AudioBufferSourceNode {
   const now = audioCtx.currentTime;
-  const duration = 6.5; // slightly shorter than the 8s phase — leaves a breath gap
+  const duration = 7.8; // fills the phase, 0.2s gap before the next cue
 
   // 2-second looped noise buffer
   const bufSize = audioCtx.sampleRate * 2;
@@ -42,12 +39,10 @@ function playBreath(
   noise.buffer = buffer;
   noise.loop = true;
 
-  // Bandpass shapes the noise into a breath texture
   const bandpass = audioCtx.createBiquadFilter();
   bandpass.type = "bandpass";
   bandpass.Q.value = 0.8;
 
-  // High-pass removes low rumble
   const highpass = audioCtx.createBiquadFilter();
   highpass.type = "highpass";
   highpass.frequency.value = 150;
@@ -59,14 +54,20 @@ function playBreath(
   highpass.connect(gainNode);
   gainNode.connect(audioCtx.destination);
 
-  if (isInhale) {
-    // Filter sweeps up — air coming in
+  if (phase === 0) {
+    // Inhale: filter sweeps up
     bandpass.frequency.setValueAtTime(350, now);
     bandpass.frequency.exponentialRampToValueAtTime(1400, now + duration);
-  } else {
-    // Filter sweeps down — air leaving
+  } else if (phase === 1) {
+    // Hold full: steady at bright end where inhale left off
+    bandpass.frequency.setValueAtTime(1400, now);
+  } else if (phase === 2) {
+    // Exhale: filter sweeps down
     bandpass.frequency.setValueAtTime(1400, now);
     bandpass.frequency.exponentialRampToValueAtTime(350, now + duration);
+  } else {
+    // Hold empty: steady at dark end where exhale left off
+    bandpass.frequency.setValueAtTime(350, now);
   }
 
   // Steady low volume — quick fade in, hold level, tiny fade out to avoid click
@@ -106,7 +107,7 @@ function SessionInner() {
   const hasLoggedRef = useRef(false);
   const prevLineIndexRef = useRef(-1);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const breathSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const breathSourceRef = useRef<AudioBufferSourceNode | null>(null); // current playing breath
 
   const isFinished = elapsedMs >= SESSION_LENGTH_MS;
 
