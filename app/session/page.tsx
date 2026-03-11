@@ -8,8 +8,18 @@ import { getScriptForEmotion, type Mode } from "@/data/scripts";
 import { practiceStore } from "@/lib/practiceStore";
 import { getSettings } from "@/lib/settingsStore";
 
-// Frequencies for each phase: inhale, hold-full, exhale, hold-empty
-const PHASE_FREQS = [440, 528, 396, 330];
+// Fundamental frequencies per phase: inhale, hold-full, exhale, hold-empty
+// Lower register — grounding rather than alerting
+const PHASE_FREQS = [256, 320, 213, 192];
+
+// Inharmonic overtone ratios characteristic of a struck metal bowl
+const BOWL_OVERTONES = [
+  { ratio: 1,    gain: 0.55 },
+  { ratio: 2.76, gain: 0.25 },
+  { ratio: 5.40, gain: 0.08 },
+];
+
+const BOWL_DECAY = 2.8; // seconds — long ring-out
 
 function hapticPulse() {
   if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -23,22 +33,37 @@ function hapticComplete() {
   }
 }
 
-function playTone(audioCtx: AudioContext, frequency: number) {
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-
-  osc.type = "sine";
-  osc.frequency.value = frequency;
-
+function playTone(audioCtx: AudioContext, fundamental: number) {
   const now = audioCtx.currentTime;
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.12, now + 0.05);
-  gain.gain.linearRampToValueAtTime(0, now + 0.5);
 
-  osc.start(now);
-  osc.stop(now + 0.6);
+  // Warm low-pass filter — removes harshness above ~1.4kHz
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = 1400;
+  filter.Q.value = 0.7;
+  filter.connect(audioCtx.destination);
+
+  // Master envelope: fast strike transient → slow exponential decay
+  const master = audioCtx.createGain();
+  master.connect(filter);
+  master.gain.setValueAtTime(0, now);
+  master.gain.linearRampToValueAtTime(0.3, now + 0.008); // sharp strike
+  master.gain.exponentialRampToValueAtTime(0.0001, now + BOWL_DECAY);
+
+  // Stack inharmonic partials
+  for (const { ratio, gain } of BOWL_OVERTONES) {
+    const osc = audioCtx.createOscillator();
+    const oscGain = audioCtx.createGain();
+    osc.connect(oscGain);
+    oscGain.connect(master);
+
+    osc.type = "sine";
+    osc.frequency.value = fundamental * ratio;
+    oscGain.gain.value = gain;
+
+    osc.start(now);
+    osc.stop(now + BOWL_DECAY + 0.1);
+  }
 }
 
 const PHASE_MS = 8_000;
