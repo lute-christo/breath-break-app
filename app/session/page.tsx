@@ -8,18 +8,18 @@ import { getScriptForEmotion, type Mode } from "@/data/scripts";
 import { practiceStore } from "@/lib/practiceStore";
 import { getSettings } from "@/lib/settingsStore";
 
-// Musical notes per phase: C4, E4, A3, G3
+// Musical notes per phase: C2, E2, A1, G1 (two octaves below original)
 // Inhale (gathering) → Hold full (present) → Exhale (releasing) → Hold empty (low)
-const PHASE_FREQS = [261.63, 329.63, 220, 196];
+const PHASE_FREQS = [65.41, 82.41, 55.0, 49.0];
 
 // Harmonic partials with individual decay rates — higher partials die faster,
 // leaving the fundamental to sustain like a real piano string
 const PIANO_PARTIALS = [
-  { ratio: 1, gain: 0.50, decay: 4.0 }, // fundamental — longest sustain
-  { ratio: 2, gain: 0.22, decay: 2.2 }, // octave
-  { ratio: 3, gain: 0.12, decay: 1.4 }, // fifth
-  { ratio: 4, gain: 0.06, decay: 0.9 }, // two octaves
-  { ratio: 5, gain: 0.03, decay: 0.5 }, // major third — brief brightness
+  { ratio: 1, gain: 0.50, decay: 8.0 }, // fundamental — long sustain
+  { ratio: 2, gain: 0.22, decay: 4.5 }, // octave
+  { ratio: 3, gain: 0.12, decay: 2.8 }, // fifth
+  { ratio: 4, gain: 0.06, decay: 1.8 }, // two octaves
+  { ratio: 5, gain: 0.03, decay: 1.0 }, // major third — brief brightness
 ];
 
 function hapticPulse() {
