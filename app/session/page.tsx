@@ -20,44 +20,68 @@ function hapticComplete() {
   }
 }
 
-function playThud(audioCtx: AudioContext) {
+// Returns the noise source so the caller can stop it early (e.g. on pause).
+// Hold phases (1, 3) return null — silence is correct there, nothing is moving.
+function playBreath(
+  audioCtx: AudioContext,
+  phase: number
+): AudioBufferSourceNode | null {
+  if (phase === 1 || phase === 3) return null;
+
+  const isInhale = phase === 0;
   const now = audioCtx.currentTime;
+  const duration = 6.5; // slightly shorter than the 8s phase — leaves a breath gap
 
-  // Sub-bass body: pitch sweeps 120Hz → 45Hz in 60ms, decays over ~350ms
-  const body = audioCtx.createOscillator();
-  const bodyGain = audioCtx.createGain();
-  body.connect(bodyGain);
-  bodyGain.connect(audioCtx.destination);
-
-  body.type = "sine";
-  body.frequency.setValueAtTime(120, now);
-  body.frequency.exponentialRampToValueAtTime(45, now + 0.06);
-
-  bodyGain.gain.setValueAtTime(1.0, now);
-  bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
-
-  body.start(now);
-  body.stop(now + 0.4);
-
-  // Brief noise transient: the "click" of the hit
-  const clickDuration = audioCtx.sampleRate * 0.018; // 18ms
-  const buffer = audioCtx.createBuffer(1, clickDuration, audioCtx.sampleRate);
+  // 2-second looped noise buffer
+  const bufSize = audioCtx.sampleRate * 2;
+  const buffer = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
   const data = buffer.getChannelData(0);
-  for (let i = 0; i < clickDuration; i++) {
-    data[i] = Math.random() * 2 - 1;
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+  noise.loop = true;
+
+  // Bandpass shapes the noise into a breath texture
+  const bandpass = audioCtx.createBiquadFilter();
+  bandpass.type = "bandpass";
+  bandpass.Q.value = 0.8;
+
+  // High-pass removes low rumble
+  const highpass = audioCtx.createBiquadFilter();
+  highpass.type = "highpass";
+  highpass.frequency.value = 150;
+
+  const gainNode = audioCtx.createGain();
+
+  noise.connect(bandpass);
+  bandpass.connect(highpass);
+  highpass.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  if (isInhale) {
+    // Filter sweeps up — throat and chest opening as air comes in
+    bandpass.frequency.setValueAtTime(350, now);
+    bandpass.frequency.exponentialRampToValueAtTime(1400, now + duration);
+    // Amplitude: rises quickly, holds, fades at the end
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(0.18, now + 0.4);
+    gainNode.gain.setValueAtTime(0.18, now + duration - 0.6);
+    gainNode.gain.linearRampToValueAtTime(0, now + duration);
+  } else {
+    // Exhale: filter sweeps down — air leaving
+    bandpass.frequency.setValueAtTime(1400, now);
+    bandpass.frequency.exponentialRampToValueAtTime(350, now + duration);
+    // Amplitude: immediate, steady, fades out
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(0.18, now + 0.2);
+    gainNode.gain.setValueAtTime(0.18, now + duration - 0.8);
+    gainNode.gain.linearRampToValueAtTime(0, now + duration);
   }
 
-  const click = audioCtx.createBufferSource();
-  click.buffer = buffer;
-
-  const clickGain = audioCtx.createGain();
-  click.connect(clickGain);
-  clickGain.connect(audioCtx.destination);
-
-  clickGain.gain.setValueAtTime(0.35, now);
-  clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.018);
-
-  click.start(now);
+  noise.start(now);
+  noise.stop(now + duration + 0.1);
+  return noise;
 }
 
 const PHASE_MS = 8_000;
@@ -86,6 +110,7 @@ function SessionInner() {
   const hasLoggedRef = useRef(false);
   const prevLineIndexRef = useRef(-1);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const breathSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   const isFinished = elapsedMs >= SESSION_LENGTH_MS;
 
@@ -131,6 +156,14 @@ function SessionInner() {
     if (sessionSettings.hapticEnabled) hapticComplete();
   }, [isFinished, elapsedMs, emotion, mode, startedAt, endedEarly, sessionSettings.hapticEnabled, SESSION_LENGTH_MS]);
 
+  // Stop breath sound when paused
+  useEffect(() => {
+    if (isPaused) {
+      try { breathSourceRef.current?.stop(); } catch {}
+      breathSourceRef.current = null;
+    }
+  }, [isPaused]);
+
   // Haptic + audio on phase change
   const lineIndex = Math.floor(elapsedMs / PHASE_MS) % script.lines.length;
 
@@ -140,12 +173,18 @@ function SessionInner() {
 
     prevLineIndexRef.current = lineIndex;
 
+    // Stop any still-playing breath from the previous phase
+    try { breathSourceRef.current?.stop(); } catch {}
+    breathSourceRef.current = null;
+
     if (sessionSettings.hapticEnabled) hapticPulse();
 
     if (sessionSettings.audioEnabled) {
       const ctx = getAudioCtx();
       if (ctx) {
-        const play = () => playThud(ctx);
+        const play = () => {
+          breathSourceRef.current = playBreath(ctx, lineIndex);
+        };
         if (ctx.state === "suspended") {
           ctx.resume().then(play).catch(() => {});
         } else {
