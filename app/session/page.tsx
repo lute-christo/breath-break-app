@@ -6,10 +6,42 @@ import { Header } from "@/components/Header";
 import { BreathAnimation } from "@/components/BreathAnimation";
 import { getScriptForEmotion, type Mode } from "@/data/scripts";
 import { practiceStore } from "@/lib/practiceStore";
+import { getSettings } from "@/lib/settingsStore";
 
-const SESSION_LENGTH_SECONDS = 180; // 3 minutes
-const SESSION_LENGTH_MS = SESSION_LENGTH_SECONDS * 1000; // 180,000 ms
-const PHASE_MS = 8_000; // 8s per script line/phase
+// Frequencies for each phase: inhale, hold-full, exhale, hold-empty
+const PHASE_FREQS = [440, 528, 396, 330];
+
+function hapticPulse() {
+  if (typeof navigator !== "undefined" && navigator.vibrate) {
+    navigator.vibrate(50);
+  }
+}
+
+function hapticComplete() {
+  if (typeof navigator !== "undefined" && navigator.vibrate) {
+    navigator.vibrate([100, 50, 100]);
+  }
+}
+
+function playTone(audioCtx: AudioContext, frequency: number) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.type = "sine";
+  osc.frequency.value = frequency;
+
+  const now = audioCtx.currentTime;
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.12, now + 0.05);
+  gain.gain.linearRampToValueAtTime(0, now + 0.5);
+
+  osc.start(now);
+  osc.stop(now + 0.6);
+}
+
+const PHASE_MS = 8_000;
 
 function SessionInner() {
   const router = useRouter();
@@ -23,17 +55,32 @@ function SessionInner() {
 
   const script = getScriptForEmotion(emotion, mode);
 
+  // Read settings once at mount — stable for the lifetime of this session
+  const [sessionSettings] = useState(() => getSettings());
+  const SESSION_LENGTH_MS = sessionSettings.sessionLengthMinutes * 60 * 1000;
+
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [endedEarly, setEndedEarly] = useState(false);
-  const [startedAt, setStartedAt] = useState<string>(
-    () => new Date().toISOString()
-  );
+  const [startedAt] = useState<string>(() => new Date().toISOString());
 
-  // useRef instead of state to avoid React's "setState in effect" complaint
   const hasLoggedRef = useRef(false);
+  const prevLineIndexRef = useRef(-1);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
   const isFinished = elapsedMs >= SESSION_LENGTH_MS;
+
+  // Lazy AudioContext getter — deferred until first interaction
+  const getAudioCtx = (): AudioContext | null => {
+    if (typeof window === "undefined") return null;
+    const AC =
+      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return null;
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new AC();
+    }
+    return audioCtxRef.current;
+  };
 
   // Timer: tick every 100ms while running
   useEffect(() => {
@@ -42,52 +89,61 @@ function SessionInner() {
     const interval = setInterval(() => {
       setElapsedMs((prev) => {
         const next = prev + 100;
-        if (next >= SESSION_LENGTH_MS) {
-          return SESSION_LENGTH_MS;
-        }
-        return next;
+        return next >= SESSION_LENGTH_MS ? SESSION_LENGTH_MS : next;
       });
     }, 100);
 
     return () => clearInterval(interval);
-  }, [isPaused, isFinished]);
+  }, [isPaused, isFinished, SESSION_LENGTH_MS]);
 
   // Log once when session finishes (full or early)
   useEffect(() => {
-    if (!isFinished || hasLoggedRef.current || !startedAt) return;
+    if (!isFinished || hasLoggedRef.current) return;
 
     const durationSec = Math.round(elapsedMs / 1000);
     const completed = !endedEarly && elapsedMs >= SESSION_LENGTH_MS;
 
     practiceStore
-      .logSession({
-        emotion,
-        mode,
-        startedAt,
-        durationSec,
-        completed,
-      })
-      .catch((err) => {
-        console.error("Failed to log practice session", err);
-      });
+      .logSession({ emotion, mode, startedAt, durationSec, completed })
+      .catch((err) => console.error("Failed to log practice session", err));
 
     hasLoggedRef.current = true;
-  }, [isFinished, startedAt, elapsedMs, emotion, mode, endedEarly]);
 
-  // Timer display in MM:SS
+    if (sessionSettings.hapticEnabled) hapticComplete();
+  }, [isFinished, elapsedMs, emotion, mode, startedAt, endedEarly, sessionSettings.hapticEnabled, SESSION_LENGTH_MS]);
+
+  // Haptic + audio on phase change
+  const lineIndex = Math.floor(elapsedMs / PHASE_MS) % script.lines.length;
+
+  useEffect(() => {
+    if (isFinished || isPaused) return;
+    if (prevLineIndexRef.current === lineIndex) return;
+
+    prevLineIndexRef.current = lineIndex;
+
+    if (sessionSettings.hapticEnabled) hapticPulse();
+
+    if (sessionSettings.audioEnabled) {
+      const ctx = getAudioCtx();
+      if (ctx) {
+        const play = () => playTone(ctx, PHASE_FREQS[lineIndex % PHASE_FREQS.length]);
+        if (ctx.state === "suspended") {
+          ctx.resume().then(play).catch(() => {});
+        } else {
+          play();
+        }
+      }
+    }
+  }, [lineIndex, isFinished, isPaused, sessionSettings.hapticEnabled, sessionSettings.audioEnabled]);
+
+  // Timer display
   const elapsedSeconds = Math.floor(elapsedMs / 1000);
-  const minutes = Math.floor(elapsedSeconds / 60)
-    .toString()
-    .padStart(2, "0");
+  const minutes = Math.floor(elapsedSeconds / 60).toString().padStart(2, "0");
   const seconds = (elapsedSeconds % 60).toString().padStart(2, "0");
 
-  // Script line: one line per 8 seconds, loop if needed
-  const lineIndex = Math.floor(elapsedMs / PHASE_MS) % script.lines.length;
   const currentLine = script.lines[lineIndex];
 
-  const handlePauseResume = () => {
-    setIsPaused((prev) => !prev);
-  };
+  const handlePauseResume = () => setIsPaused((prev) => !prev);
 
   const handleEndNow = () => {
     setEndedEarly(true);
@@ -96,17 +152,18 @@ function SessionInner() {
   };
 
   const handleAnotherRound = () => {
-    // start a fresh round
     setElapsedMs(0);
     setIsPaused(false);
     setEndedEarly(false);
-    setStartedAt(new Date().toISOString());
     hasLoggedRef.current = false;
+    prevLineIndexRef.current = -1;
   };
 
   const handleDifferentEmotion = () => {
     router.push(`/modules?mode=${encodeURIComponent(mode)}`);
   };
+
+  const sessionLengthLabel = `${sessionSettings.sessionLengthMinutes} minute${sessionSettings.sessionLengthMinutes === 1 ? "" : "s"}`;
 
   return (
     <main className="space-y-6 pb-4">
@@ -131,9 +188,6 @@ function SessionInner() {
         </div>
 
         {isFinished ? (
-          // =====================
-          // SESSION COMPLETE VIEW
-          // =====================
           <div className="space-y-4 mt-4">
             <p className="text-base">
               {endedEarly ? (
@@ -143,8 +197,8 @@ function SessionInner() {
                 </>
               ) : (
                 <>
-                  3 minutes with <span className="uppercase">{emotion}</span>{" "}
-                  completed.
+                  {sessionLengthLabel} with{" "}
+                  <span className="uppercase">{emotion}</span> completed.
                 </>
               )}
             </p>
@@ -157,7 +211,7 @@ function SessionInner() {
                 onClick={handleAnotherRound}
                 className="w-full py-3.5 border border-neutral-700 rounded-md text-sm hover:border-neutral-400 active:scale-[0.99] transition"
               >
-                Another 3 minutes with {emotion}
+                Another {sessionLengthLabel} with {emotion}
               </button>
               <button
                 onClick={handleDifferentEmotion}
@@ -172,22 +226,16 @@ function SessionInner() {
             </p>
           </div>
         ) : (
-          // ====================
-          // ACTIVE SESSION VIEW
-          // ====================
           <>
-            {/* Breath animation driven by elapsedMs */}
             <div className="mt-2">
               <BreathAnimation elapsedMs={elapsedMs} />
             </div>
 
-            {/* Script prompt */}
             <div className="space-y-1 mt-3">
               <p className="text-xs text-neutral-500">{currentLine.label}</p>
               <p className="text-base leading-relaxed">{currentLine.text}</p>
             </div>
 
-            {/* Controls: pause / end */}
             <div className="flex items-center gap-3 mt-5">
               <button
                 onClick={handlePauseResume}

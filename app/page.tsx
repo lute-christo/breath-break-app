@@ -10,6 +10,7 @@ import { ALL_EMOTIONS } from "@/data/scripts";
 import type { Mode } from "@/data/scripts";
 import { usePracticeData } from "@/hooks/usePracticeData";
 import { practiceStore } from "@/lib/practiceStore";
+import { getSettings } from "@/lib/settingsStore";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { BottomNav } from "@/components/BottomNav";
 
@@ -68,9 +69,56 @@ export default function HomePage() {
 
   const handleDevReset = async () => {
     await practiceStore.resetAll();
-    // simplest way to refresh the hook data
     window.location.reload();
   };
+
+  // Check if a daily reminder notification should fire
+  useEffect(() => {
+    if (!onboarded) return;
+
+    async function checkReminder() {
+      const s = getSettings();
+      if (!s.reminderEnabled) return;
+      if (typeof Notification === "undefined") return;
+      if (Notification.permission !== "granted") return;
+
+      const today = new Date().toISOString().slice(0, 10);
+      const shownKey = `breathbreak_reminder_shown_${today}`;
+      if (localStorage.getItem(shownKey)) return;
+
+      const [h, m] = s.reminderTime.split(":").map(Number);
+      const reminderTime = new Date();
+      reminderTime.setHours(h, m, 0, 0);
+      if (new Date() < reminderTime) return;
+
+      const sessions = await practiceStore.getSessions();
+      const practicedToday = sessions.some(
+        (sess) => sess.startedAt.slice(0, 10) === today && sess.completed
+      );
+      if (practicedToday) return;
+
+      const notify = (reg: ServiceWorkerRegistration | null) => {
+        const opts = {
+          body: "Time for your daily practice. Turn toward something.",
+          icon: "/icons/icon-192.png",
+        };
+        if (reg) {
+          reg.showNotification("BREATH//BREAK", opts);
+        } else {
+          new Notification("BREATH//BREAK", opts);
+        }
+        localStorage.setItem(shownKey, "1");
+      };
+
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.ready.then(notify).catch(() => notify(null));
+      } else {
+        notify(null);
+      }
+    }
+
+    checkReminder();
+  }, [onboarded]);
 
   if (onboarded === null) return null;
   if (!onboarded) return <Onboarding onDone={handleOnboardingDone} />;

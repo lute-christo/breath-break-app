@@ -15,7 +15,7 @@ export function Header() {
       </button>
       <button
         className="text-xs text-neutral-400 hover:text-neutral-200 transition"
-        onClick={() => router.push("/premium")}
+        onClick={() => router.push("/settings")}
       >
         ⋯
       </button>
