@@ -7,11 +7,13 @@ import { EmotionGrid } from "@/components/EmotionGrid";
 import { BottomNav } from "@/components/BottomNav";
 import { ALL_EMOTIONS } from "@/data/scripts";
 import type { Mode } from "@/data/scripts";
+import { usePremium } from "@/hooks/usePremium";
 
 function ModulesInner() {
   const searchParams = useSearchParams();
   const rawMode = (searchParams.get("mode") || "standard").toLowerCase() as Mode;
   const mode: Mode = rawMode === "hardcore" ? "hardcore" : "standard";
+  const { isPremium } = usePremium();
 
   return (
     <main className="space-y-6 pb-16">
@@ -25,7 +27,7 @@ function ModulesInner() {
           </div>
         </div>
 
-        <EmotionGrid mode={mode} emotions={ALL_EMOTIONS} />
+        <EmotionGrid mode={mode} emotions={ALL_EMOTIONS} isPremium={isPremium} />
       </section>
 
       <BottomNav />

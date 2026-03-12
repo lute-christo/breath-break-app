@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { BottomNav } from "@/components/BottomNav";
 import { useSettings } from "@/hooks/useSettings";
+import { usePremium } from "@/hooks/usePremium";
 import { practiceStore } from "@/lib/practiceStore";
 import type { SessionLengthMinutes } from "@/lib/settingsStore";
 
@@ -32,7 +34,9 @@ function Toggle({
 }
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { settings, update } = useSettings();
+  const { isPremium, isBetaUnlock, toggleBetaUnlock } = usePremium();
 
   const handleReminderToggle = async (enabled: boolean) => {
     if (enabled) {
@@ -69,19 +73,32 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between gap-4">
             <span className="text-sm text-neutral-300">Session length</span>
             <div className="inline-flex items-center text-[0.7rem] border border-neutral-700 rounded-full overflow-hidden shrink-0">
-              {([1, 3, 5] as SessionLengthMinutes[]).map((len) => (
-                <button
-                  key={len}
-                  onClick={() => update({ sessionLengthMinutes: len })}
-                  className={`px-3 py-1 uppercase tracking-[0.1em] transition ${
-                    settings.sessionLengthMinutes === len
-                      ? "bg-neutral-200 text-black"
-                      : "text-neutral-400 hover:text-neutral-200"
-                  }`}
-                >
-                  {len}m
-                </button>
-              ))}
+              {([1, 3, 5] as SessionLengthMinutes[]).map((len) => {
+                const locked = !isPremium && len !== 3;
+                return (
+                  <button
+                    key={len}
+                    onClick={() => {
+                      if (locked) { router.push("/premium"); return; }
+                      update({ sessionLengthMinutes: len });
+                    }}
+                    className={`px-3 py-1 uppercase tracking-[0.1em] transition relative ${
+                      settings.sessionLengthMinutes === len
+                        ? "bg-neutral-200 text-black"
+                        : locked
+                        ? "text-neutral-700"
+                        : "text-neutral-400 hover:text-neutral-200"
+                    }`}
+                  >
+                    {len}m
+                    {locked && (
+                      <span className="absolute top-0.5 right-0.5 text-[0.45rem] text-neutral-700">
+                        PRO
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -104,7 +121,7 @@ export default function SettingsPage() {
             <div>
               <p className="text-sm text-neutral-300">Audio cues</p>
               <p className="text-xs text-neutral-500">
-                Soft tone on each phase change
+                Breath sounds on each phase
               </p>
             </div>
             <Toggle
@@ -181,6 +198,29 @@ export default function SettingsPage() {
           <span>Privacy Policy</span>
           <span className="text-neutral-600">→</span>
         </Link>
+
+        <div className="border-t border-neutral-800" />
+
+        {/* Beta access — remove before public launch */}
+        <div className="border border-amber-900/50 rounded-md p-4 space-y-3">
+          <p className="text-[0.65rem] uppercase tracking-[0.2em] text-amber-600/80">
+            Beta
+          </p>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-neutral-300">Unlock all features</p>
+              <p className="text-xs text-neutral-500">
+                Grants premium access for beta testing
+              </p>
+            </div>
+            <Toggle enabled={isBetaUnlock} onChange={toggleBetaUnlock} />
+          </div>
+          {isBetaUnlock && (
+            <p className="text-[0.65rem] text-amber-700">
+              All premium features active.
+            </p>
+          )}
+        </div>
       </section>
 
       <BottomNav />

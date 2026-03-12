@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Onboarding } from "@/components/Onboarding";
 import { Header } from "@/components/Header";
@@ -11,6 +12,7 @@ import type { Mode } from "@/data/scripts";
 import { usePracticeData } from "@/hooks/usePracticeData";
 import { practiceStore } from "@/lib/practiceStore";
 import { getSettings } from "@/lib/settingsStore";
+import { usePremium } from "@/hooks/usePremium";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { BottomNav } from "@/components/BottomNav";
 
@@ -40,8 +42,10 @@ function streakLine(streakDays: number) {
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const [mode, setMode] = useState<Mode>("standard");
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
+  const { isPremium } = usePremium();
 
   useEffect(() => {
     const done = localStorage.getItem("breathbreak_onboarded");
@@ -190,14 +194,24 @@ export default function HomePage() {
                 Standard
               </button>
               <button
-                onClick={() => setMode("hardcore")}
-                className={`px-3 py-1 uppercase tracking-[0.15em] ${
+                onClick={() => {
+                  if (!isPremium) { router.push("/premium"); return; }
+                  setMode("hardcore");
+                }}
+                className={`px-3 py-1 uppercase tracking-[0.15em] relative ${
                   mode === "hardcore"
                     ? "bg-red-600 text-white"
-                    : "text-neutral-400"
+                    : isPremium
+                    ? "text-neutral-400"
+                    : "text-neutral-600"
                 }`}
               >
                 Hardcore
+                {!isPremium && (
+                  <span className="absolute top-0.5 right-0.5 text-[0.45rem] text-neutral-700">
+                    PRO
+                  </span>
+                )}
               </button>
             </div>
           </div>
@@ -209,7 +223,7 @@ export default function HomePage() {
       {/* Emotion grid */}
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-neutral-200">Choose an emotion</h2>
-        <EmotionGrid mode={mode} emotions={ALL_EMOTIONS} />
+        <EmotionGrid mode={mode} emotions={ALL_EMOTIONS} isPremium={isPremium} />
       </section>
 
       {/* Stats footer + history link */}

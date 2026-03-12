@@ -557,15 +557,17 @@ const SCRIPTS: EmotionScript[] = [
   },
 ];
 
+export const FREE_EMOTIONS = ["anxiety", "anger", "grief", "restless"];
+
 export const ALL_EMOTIONS = [
   "anxiety",
   "anger",
   "grief",
+  "restless",
   "shame",
   "jealousy",
   "loneliness",
   "exhaustion",
-  "restless",
   "numbness",
 ];
 
