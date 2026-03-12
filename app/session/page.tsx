@@ -107,9 +107,18 @@ function SessionInner() {
   const hasLoggedRef = useRef(false);
   const prevLineIndexRef = useRef(-1);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const breathSourceRef = useRef<AudioBufferSourceNode | null>(null); // current playing breath
+  const breathSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const isFinishedRef = useRef(false);
+
+  // Wall-clock refs — prevent timer drift on screen lock / app background
+  const sessionStartTimeRef = useRef<number>(Date.now());
+  const totalPausedMsRef = useRef<number>(0);
+  const pausedAtRef = useRef<number | null>(null);
 
   const isFinished = elapsedMs >= SESSION_LENGTH_MS;
+
+  // Keep isFinishedRef in sync for use in event handlers that can't close over state
+  useEffect(() => { isFinishedRef.current = isFinished; }, [isFinished]);
 
   // Lazy AudioContext getter — deferred until first interaction
   const getAudioCtx = (): AudioContext | null => {
@@ -123,19 +132,62 @@ function SessionInner() {
     return audioCtxRef.current;
   };
 
-  // Timer: tick every 100ms while running
+  // Wall-clock timer — reads actual elapsed time so screen lock / backgrounding
+  // doesn't cause the timer to fall behind
   useEffect(() => {
     if (isPaused || isFinished) return;
 
     const interval = setInterval(() => {
-      setElapsedMs((prev) => {
-        const next = prev + 100;
-        return next >= SESSION_LENGTH_MS ? SESSION_LENGTH_MS : next;
-      });
+      const elapsed = Date.now() - sessionStartTimeRef.current - totalPausedMsRef.current;
+      setElapsedMs(Math.min(elapsed, SESSION_LENGTH_MS));
     }, 100);
 
     return () => clearInterval(interval);
   }, [isPaused, isFinished, SESSION_LENGTH_MS]);
+
+  // Track time spent paused so wall-clock calculation stays accurate
+  useEffect(() => {
+    if (isPaused) {
+      pausedAtRef.current = Date.now();
+    } else {
+      if (pausedAtRef.current !== null) {
+        totalPausedMsRef.current += Date.now() - pausedAtRef.current;
+        pausedAtRef.current = null;
+      }
+    }
+  }, [isPaused]);
+
+  // Resume AudioContext if the browser suspended it during screen lock / tab switch
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        audioCtxRef.current?.resume().catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
+  // Back-button guard — intercept Android back gesture / browser back while
+  // session is in progress and confirm before leaving
+  useEffect(() => {
+    window.history.pushState(null, "", window.location.href);
+
+    const handlePopState = () => {
+      if (isFinishedRef.current) return;
+      const leave = window.confirm(
+        "Leave this session? Your progress so far will be saved."
+      );
+      if (leave) {
+        router.push("/");
+      } else {
+        window.history.pushState(null, "", window.location.href);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [router]);
 
   // Log once when session finishes (full or early)
   useEffect(() => {
@@ -207,6 +259,9 @@ function SessionInner() {
   };
 
   const handleAnotherRound = () => {
+    sessionStartTimeRef.current = Date.now();
+    totalPausedMsRef.current = 0;
+    pausedAtRef.current = null;
     setElapsedMs(0);
     setIsPaused(false);
     setEndedEarly(false);

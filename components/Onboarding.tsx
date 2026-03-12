@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { saveSettings } from "@/lib/settingsStore";
 
 interface OnboardingProps {
   onDone: () => void;
@@ -132,16 +133,78 @@ const SCREENS = [
   },
 ];
 
+function NotificationPrompt({ onDone }: { onDone: () => void }) {
+  const [requesting, setRequesting] = useState(false);
+
+  const handleYes = async () => {
+    setRequesting(true);
+    try {
+      if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
+        const result = await Notification.requestPermission();
+        if (result === "granted") {
+          saveSettings({ reminderEnabled: true });
+        }
+      } else if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        saveSettings({ reminderEnabled: true });
+      }
+    } catch {
+      // Permission request failed — continue anyway
+    }
+    onDone();
+  };
+
+  return (
+    <motion.div
+      key="notif"
+      initial={{ opacity: 0, x: 24 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.25, ease: "easeInOut" }}
+      className="space-y-6"
+    >
+      <h1 className="text-3xl font-black tracking-tight leading-tight">
+        Stay in the habit.
+      </h1>
+
+      <p className="text-base text-neutral-300 leading-relaxed">
+        Want a daily reminder to practice? The app will notify you if you
+        haven&apos;t shown up yet that day.
+      </p>
+
+      <p className="text-xs text-neutral-500">
+        You can change the reminder time or turn it off at any time in
+        Settings.
+      </p>
+
+      <div className="space-y-3 pt-2">
+        <button
+          onClick={handleYes}
+          disabled={requesting}
+          className="w-full py-4 border border-neutral-700 rounded-md text-sm tracking-[0.1em] hover:border-neutral-400 active:scale-[0.99] transition disabled:opacity-50"
+        >
+          Yes, remind me
+        </button>
+        <button
+          onClick={onDone}
+          className="w-full py-3 text-sm text-neutral-500 hover:text-neutral-300 transition"
+        >
+          Maybe later
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
 export function Onboarding({ onDone }: OnboardingProps) {
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
+  const [showNotifPrompt, setShowNotifPrompt] = useState(false);
 
   const isLast = step === SCREENS.length - 1;
 
   const handleNext = () => {
     setDirection(1);
     if (isLast) {
-      onDone();
+      setShowNotifPrompt(true);
     } else {
       setStep((s) => s + 1);
     }
@@ -154,54 +217,61 @@ export function Onboarding({ onDone }: OnboardingProps) {
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
       <div className="flex-1 flex flex-col max-w-md mx-auto w-full px-6 pt-8 pb-6">
-        {/* Skip button */}
+
+        {/* Skip button — hidden on notification prompt */}
         <div className="flex justify-end mb-8">
-          <button
-            onClick={handleSkip}
-            className="text-[0.65rem] uppercase tracking-[0.15em] text-neutral-600 hover:text-neutral-400 transition"
-          >
-            Skip
-          </button>
+          {!showNotifPrompt && (
+            <button
+              onClick={handleSkip}
+              className="text-[0.65rem] uppercase tracking-[0.15em] text-neutral-600 hover:text-neutral-400 transition"
+            >
+              Skip
+            </button>
+          )}
         </div>
 
         {/* Screen content */}
         <div className="flex-1">
-          <AnimatePresence mode="wait" custom={direction}>
-            <motion.div
-              key={SCREENS[step].key}
-              custom={direction}
-              initial={{ opacity: 0, x: 24 * direction }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -24 * direction }}
-              transition={{ duration: 0.25, ease: "easeInOut" }}
+          {showNotifPrompt ? (
+            <NotificationPrompt onDone={onDone} />
+          ) : (
+            <AnimatePresence mode="wait" custom={direction}>
+              <motion.div
+                key={SCREENS[step].key}
+                custom={direction}
+                initial={{ opacity: 0, x: 24 * direction }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -24 * direction }}
+                transition={{ duration: 0.25, ease: "easeInOut" }}
+              >
+                {SCREENS[step].content}
+              </motion.div>
+            </AnimatePresence>
+          )}
+        </div>
+
+        {/* Footer: dots + CTA — hidden on notification prompt */}
+        {!showNotifPrompt && (
+          <div className="space-y-6 pt-4">
+            <div className="flex justify-center gap-2">
+              {SCREENS.map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
+                    i === step ? "bg-neutral-200" : "bg-neutral-700"
+                  }`}
+                />
+              ))}
+            </div>
+
+            <button
+              onClick={handleNext}
+              className="w-full py-4 border border-neutral-700 rounded-md text-sm tracking-[0.1em] hover:border-neutral-400 active:scale-[0.99] transition"
             >
-              {SCREENS[step].content}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-
-        {/* Footer: dots + button */}
-        <div className="space-y-6 pt-4">
-          {/* Step dots */}
-          <div className="flex justify-center gap-2">
-            {SCREENS.map((_, i) => (
-              <div
-                key={i}
-                className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
-                  i === step ? "bg-neutral-200" : "bg-neutral-700"
-                }`}
-              />
-            ))}
+              {isLast ? "Start practicing //" : "Continue →"}
+            </button>
           </div>
-
-          {/* CTA button */}
-          <button
-            onClick={handleNext}
-            className="w-full py-4 border border-neutral-700 rounded-md text-sm tracking-[0.1em] hover:border-neutral-400 active:scale-[0.99] transition"
-          >
-            {isLast ? "Start practicing //" : "Continue →"}
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );

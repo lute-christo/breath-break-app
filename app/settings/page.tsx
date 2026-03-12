@@ -173,6 +173,14 @@ export default function SettingsPage() {
           <span>BREATH//BREAK Pro</span>
           <span className="text-neutral-500">→</span>
         </Link>
+
+        <Link
+          href="/privacy"
+          className="flex items-center justify-between text-sm text-neutral-500 hover:text-neutral-300 transition"
+        >
+          <span>Privacy Policy</span>
+          <span className="text-neutral-600">→</span>
+        </Link>
       </section>
 
       <BottomNav />
