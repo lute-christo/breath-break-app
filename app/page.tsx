@@ -198,20 +198,15 @@ export default function HomePage() {
                   if (!isPremium) { router.push("/premium"); return; }
                   setMode("hardcore");
                 }}
-                className={`px-3 py-1 uppercase tracking-[0.15em] relative ${
+                className={`px-3 py-1 uppercase tracking-[0.15em] ${
                   mode === "hardcore"
                     ? "bg-red-600 text-white"
                     : isPremium
                     ? "text-neutral-400"
-                    : "text-neutral-600"
+                    : "text-neutral-700"
                 }`}
               >
                 Hardcore
-                {!isPremium && (
-                  <span className="absolute top-0.5 right-0.5 text-[0.45rem] text-neutral-700">
-                    PRO
-                  </span>
-                )}
               </button>
             </div>
           </div>

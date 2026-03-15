@@ -82,7 +82,7 @@ export default function SettingsPage() {
                       if (locked) { router.push("/premium"); return; }
                       update({ sessionLengthMinutes: len });
                     }}
-                    className={`px-3 py-1 uppercase tracking-[0.1em] transition relative ${
+                    className={`px-3 py-1 uppercase tracking-[0.1em] transition ${
                       settings.sessionLengthMinutes === len
                         ? "bg-neutral-200 text-black"
                         : locked
@@ -91,11 +91,6 @@ export default function SettingsPage() {
                     }`}
                   >
                     {len}m
-                    {locked && (
-                      <span className="absolute top-0.5 right-0.5 text-[0.45rem] text-neutral-700">
-                        PRO
-                      </span>
-                    )}
                   </button>
                 );
               })}
