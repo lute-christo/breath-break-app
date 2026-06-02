@@ -40,6 +40,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# capacitor
-/android
-/ios
+# capacitor — track source, ignore build artifacts
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/app/release/*.aab
+/android/app/release/*.apk
+/android/app/release.keystore
+/android/local.properties
+/ios/

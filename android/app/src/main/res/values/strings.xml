@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BREATH//BREAK</string>
+    <string name="title_activity_main">BREATH//BREAK</string>
+    <string name="package_name">com.breathbreak.app</string>
+    <string name="custom_url_scheme">com.breathbreak.app</string>
+</resources>
