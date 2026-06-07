@@ -7,6 +7,7 @@ import { BreathAnimation } from "@/components/BreathAnimation";
 import { getScriptForEmotion, type Mode } from "@/data/scripts";
 import { practiceStore } from "@/lib/practiceStore";
 import { getSettings } from "@/lib/settingsStore";
+import { useSessionAudio } from "@/hooks/useSessionAudio";
 
 function hapticPulse() {
   if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -18,67 +19,6 @@ function hapticComplete() {
   if (typeof navigator !== "undefined" && navigator.vibrate) {
     navigator.vibrate([100, 50, 100]);
   }
-}
-
-// Returns the noise source so the caller can stop it early (e.g. on pause).
-// Phase 0 = inhale, 1 = hold full, 2 = exhale, 3 = hold empty
-function playBreath(
-  audioCtx: AudioContext,
-  phase: number
-): AudioBufferSourceNode {
-  const now = audioCtx.currentTime;
-  const duration = 7.8; // fills the phase, 0.2s gap before the next cue
-
-  // 2-second looped noise buffer
-  const bufSize = audioCtx.sampleRate * 2;
-  const buffer = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-
-  const noise = audioCtx.createBufferSource();
-  noise.buffer = buffer;
-  noise.loop = true;
-
-  const bandpass = audioCtx.createBiquadFilter();
-  bandpass.type = "bandpass";
-  bandpass.Q.value = 0.8;
-
-  const highpass = audioCtx.createBiquadFilter();
-  highpass.type = "highpass";
-  highpass.frequency.value = 150;
-
-  const gainNode = audioCtx.createGain();
-
-  noise.connect(bandpass);
-  bandpass.connect(highpass);
-  highpass.connect(gainNode);
-  gainNode.connect(audioCtx.destination);
-
-  if (phase === 0) {
-    // Inhale: filter sweeps up
-    bandpass.frequency.setValueAtTime(350, now);
-    bandpass.frequency.exponentialRampToValueAtTime(1400, now + duration);
-  } else if (phase === 1) {
-    // Hold full: steady at bright end where inhale left off
-    bandpass.frequency.setValueAtTime(1400, now);
-  } else if (phase === 2) {
-    // Exhale: filter sweeps down
-    bandpass.frequency.setValueAtTime(1400, now);
-    bandpass.frequency.exponentialRampToValueAtTime(350, now + duration);
-  } else {
-    // Hold empty: steady at dark end where exhale left off
-    bandpass.frequency.setValueAtTime(350, now);
-  }
-
-  // Steady low volume — quick fade in, hold level, tiny fade out to avoid click
-  gainNode.gain.setValueAtTime(0, now);
-  gainNode.gain.linearRampToValueAtTime(0.07, now + 0.3);
-  gainNode.gain.setValueAtTime(0.07, now + duration - 0.1);
-  gainNode.gain.linearRampToValueAtTime(0, now + duration);
-
-  noise.start(now);
-  noise.stop(now + duration + 0.1);
-  return noise;
 }
 
 const PHASE_MS = 8_000;
@@ -106,8 +46,6 @@ function SessionInner() {
 
   const hasLoggedRef = useRef(false);
   const prevLineIndexRef = useRef(-1);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const breathSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const isFinishedRef = useRef(false);
 
   // Wall-clock refs — prevent timer drift on screen lock / app background
@@ -119,18 +57,6 @@ function SessionInner() {
 
   // Keep isFinishedRef in sync for use in event handlers that can't close over state
   useEffect(() => { isFinishedRef.current = isFinished; }, [isFinished]);
-
-  // Lazy AudioContext getter — deferred until first interaction
-  const getAudioCtx = (): AudioContext | null => {
-    if (typeof window === "undefined") return null;
-    const AC =
-      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AC) return null;
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new AC();
-    }
-    return audioCtxRef.current;
-  };
 
   // Wall-clock timer — reads actual elapsed time so screen lock / backgrounding
   // doesn't cause the timer to fall behind
@@ -156,17 +82,6 @@ function SessionInner() {
       }
     }
   }, [isPaused]);
-
-  // Resume AudioContext if the browser suspended it during screen lock / tab switch
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        audioCtxRef.current?.resume().catch(() => {});
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, []);
 
   // Back-button guard — intercept Android back gesture / browser back while
   // session is in progress and confirm before leaving
@@ -205,15 +120,14 @@ function SessionInner() {
     if (sessionSettings.hapticEnabled) hapticComplete();
   }, [isFinished, elapsedMs, emotion, mode, startedAt, endedEarly, sessionSettings.hapticEnabled, SESSION_LENGTH_MS]);
 
-  // Stop breath sound when paused
-  useEffect(() => {
-    if (isPaused) {
-      try { breathSourceRef.current?.stop(); } catch {}
-      breathSourceRef.current = null;
-    }
-  }, [isPaused]);
+  // Session audio — plays drone loop when audio is enabled, pauses with session
+  useSessionAudio({
+    enabled: sessionSettings.audioEnabled,
+    isPaused,
+    isFinished,
+  });
 
-  // Haptic + audio on phase change
+  // Haptic on phase change
   const lineIndex = Math.floor(elapsedMs / PHASE_MS) % script.lines.length;
 
   useEffect(() => {
@@ -222,26 +136,8 @@ function SessionInner() {
 
     prevLineIndexRef.current = lineIndex;
 
-    // Stop any still-playing breath from the previous phase
-    try { breathSourceRef.current?.stop(); } catch {}
-    breathSourceRef.current = null;
-
     if (sessionSettings.hapticEnabled) hapticPulse();
-
-    if (sessionSettings.audioEnabled) {
-      const ctx = getAudioCtx();
-      if (ctx) {
-        const play = () => {
-          breathSourceRef.current = playBreath(ctx, lineIndex);
-        };
-        if (ctx.state === "suspended") {
-          ctx.resume().then(play).catch(() => {});
-        } else {
-          play();
-        }
-      }
-    }
-  }, [lineIndex, isFinished, isPaused, sessionSettings.hapticEnabled, sessionSettings.audioEnabled]);
+  }, [lineIndex, isFinished, isPaused, sessionSettings.hapticEnabled]);
 
   // Timer display
   const elapsedSeconds = Math.floor(elapsedMs / 1000);
