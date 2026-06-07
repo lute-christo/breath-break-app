@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef } from "react";
 
-const FADE_DURATION_MS = 3_000; // 3-second fade in / out
-const TARGET_VOLUME    = 0.5;
-const STEP_MS          = 50;    // volume update every 50ms
+const FADE_IN_S  = 3;   // seconds
+const FADE_OUT_S = 3;
+const TARGET_VOL = 0.5;
 
 interface UseSessionAudioOptions {
   enabled:    boolean;
@@ -13,90 +13,131 @@ interface UseSessionAudioOptions {
 }
 
 /**
- * Plays the session drone audio with a fade-in at start and fade-out at end.
- * Respects the audioEnabled setting and pauses immediately with the session.
+ * Plays the session drone using the Web Audio API for gapless looping.
+ * Fades in at session start, fades out at session end.
+ * Pause/resume suspends and resumes the AudioContext in place.
  */
 export function useSessionAudio({ enabled, isPaused, isFinished }: UseSessionAudioOptions) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const fadeRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ctxRef    = useRef<AudioContext | null>(null);
+  const gainRef   = useRef<GainNode | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const bufferRef = useRef<AudioBuffer | null>(null);
 
-  const stopFade = useCallback(() => {
-    if (fadeRef.current !== null) {
-      clearInterval(fadeRef.current);
-      fadeRef.current = null;
+  // --- helpers ---
+
+  const startSource = useCallback(() => {
+    const ctx    = ctxRef.current;
+    const gain   = gainRef.current;
+    const buffer = bufferRef.current;
+    if (!ctx || !gain || !buffer) return;
+
+    // Tear down any existing source node first
+    if (sourceRef.current) {
+      try { sourceRef.current.stop(); } catch { /* already stopped */ }
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
     }
+
+    const src  = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop   = true;          // Web Audio API loop is sample-accurate — no gap
+    src.connect(gain);
+    src.start();
+    sourceRef.current = src;
   }, []);
 
-  const fadeIn = useCallback((audio: HTMLAudioElement) => {
-    stopFade();
-    audio.volume = 0;
-    const increment = TARGET_VOLUME / (FADE_DURATION_MS / STEP_MS);
+  const fadeIn = useCallback(() => {
+    const ctx  = ctxRef.current;
+    const gain = gainRef.current;
+    if (!ctx || !gain) return;
 
-    fadeRef.current = setInterval(() => {
-      const next = audio.volume + increment;
-      if (next >= TARGET_VOLUME) {
-        audio.volume = TARGET_VOLUME;
-        stopFade();
-      } else {
-        audio.volume = next;
-      }
-    }, STEP_MS);
-  }, [stopFade]);
+    gain.gain.cancelScheduledValues(ctx.currentTime);
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(TARGET_VOL, ctx.currentTime + FADE_IN_S);
+  }, []);
 
-  const fadeOut = useCallback((audio: HTMLAudioElement) => {
-    stopFade();
-    const decrement = audio.volume / (FADE_DURATION_MS / STEP_MS);
+  const fadeOut = useCallback((onDone?: () => void) => {
+    const ctx  = ctxRef.current;
+    const gain = gainRef.current;
+    if (!ctx || !gain) return;
 
-    fadeRef.current = setInterval(() => {
-      const next = audio.volume - decrement;
-      if (next <= 0) {
-        audio.volume = 0;
-        audio.pause();
-        stopFade();
-      } else {
-        audio.volume = next;
-      }
-    }, STEP_MS);
-  }, [stopFade]);
+    const now = ctx.currentTime;
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setValueAtTime(gain.gain.value, now);
+    gain.gain.linearRampToValueAtTime(0, now + FADE_OUT_S);
 
-  // Create audio element and fade in on mount
+    if (onDone) setTimeout(onDone, FADE_OUT_S * 1000);
+  }, []);
+
+  // --- mount: create context, load buffer, start playing ---
+
   useEffect(() => {
     if (!enabled || typeof window === "undefined") return;
 
-    const audio = new Audio("/audio/session-drone.mp3");
-    audio.loop   = true;
-    audio.volume = 0;
-    audioRef.current = audio;
+    // Safari needs webkitAudioContext
+    const AC  = window.AudioContext ?? (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return;
 
-    audio.play()
-      .then(() => fadeIn(audio))
-      .catch((err) => console.warn("Session audio autoplay blocked:", err));
+    const ctx  = new AC();
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.connect(ctx.destination);
+
+    ctxRef.current  = ctx;
+    gainRef.current = gain;
+
+    fetch("/audio/session-drone.mp3")
+      .then((r) => r.arrayBuffer())
+      .then((ab) => ctx.decodeAudioData(ab))
+      .then((buf) => {
+        bufferRef.current = buf;
+        startSource();
+        fadeIn();
+      })
+      .catch((err) => console.warn("Session audio failed to load:", err));
 
     return () => {
-      stopFade();
-      audio.pause();
-      audio.src = "";
-      audioRef.current = null;
+      if (sourceRef.current) {
+        try { sourceRef.current.stop(); } catch { /* ok */ }
+        sourceRef.current = null;
+      }
+      ctx.close();
+      ctxRef.current  = null;
+      gainRef.current = null;
+      bufferRef.current = null;
     };
-  }, [enabled, fadeIn, stopFade]);
+  }, [enabled, startSource, fadeIn]);
 
-  // React to pause / finish / resume
+  // --- respond to pause / finish / resume ---
+
+  const prevIsFinishedRef = useRef(false);
+
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
+    const ctx = ctxRef.current;
+    if (!ctx) return;
+
+    const wasFinished = prevIsFinishedRef.current;
+    prevIsFinishedRef.current = isFinished;
 
     if (isFinished) {
-      // Fade out and let the interval pause it when volume hits zero
-      fadeOut(audio);
+      // Fade out then stop the source
+      fadeOut(() => {
+        if (sourceRef.current) {
+          try { sourceRef.current.stop(); } catch { /* ok */ }
+          sourceRef.current = null;
+        }
+      });
+    } else if (wasFinished && !isFinished && !isPaused) {
+      // "Another round" — session reset, restart and fade in
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      startSource();
+      fadeIn();
     } else if (isPaused) {
-      // Immediate pause — no fade
-      stopFade();
-      audio.pause();
+      // Suspend the context in place — preserves loop position exactly
+      ctx.suspend().catch(() => {});
     } else {
-      // Resuming from pause — fade back in
-      audio.play()
-        .then(() => fadeIn(audio))
-        .catch((err) => console.warn("Session audio play failed:", err));
+      // Resume from pause
+      ctx.resume().catch(() => {});
     }
-  }, [isPaused, isFinished, fadeIn, fadeOut, stopFade]);
+  }, [isPaused, isFinished, fadeIn, fadeOut, startSource]);
 }
