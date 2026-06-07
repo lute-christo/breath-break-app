@@ -1,54 +1,102 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
+
+const FADE_DURATION_MS = 3_000; // 3-second fade in / out
+const TARGET_VOLUME    = 0.5;
+const STEP_MS          = 50;    // volume update every 50ms
 
 interface UseSessionAudioOptions {
-  enabled: boolean;
-  isPaused: boolean;
+  enabled:    boolean;
+  isPaused:   boolean;
   isFinished: boolean;
 }
 
 /**
- * Plays the session drone audio while a session is active.
- * Respects the audioEnabled setting, pauses with the session,
- * and stops cleanly when the session ends or the component unmounts.
+ * Plays the session drone audio with a fade-in at start and fade-out at end.
+ * Respects the audioEnabled setting and pauses immediately with the session.
  */
 export function useSessionAudio({ enabled, isPaused, isFinished }: UseSessionAudioOptions) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fadeRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Create the audio element once on mount (if enabled)
+  const stopFade = useCallback(() => {
+    if (fadeRef.current !== null) {
+      clearInterval(fadeRef.current);
+      fadeRef.current = null;
+    }
+  }, []);
+
+  const fadeIn = useCallback((audio: HTMLAudioElement) => {
+    stopFade();
+    audio.volume = 0;
+    const increment = TARGET_VOLUME / (FADE_DURATION_MS / STEP_MS);
+
+    fadeRef.current = setInterval(() => {
+      const next = audio.volume + increment;
+      if (next >= TARGET_VOLUME) {
+        audio.volume = TARGET_VOLUME;
+        stopFade();
+      } else {
+        audio.volume = next;
+      }
+    }, STEP_MS);
+  }, [stopFade]);
+
+  const fadeOut = useCallback((audio: HTMLAudioElement) => {
+    stopFade();
+    const decrement = audio.volume / (FADE_DURATION_MS / STEP_MS);
+
+    fadeRef.current = setInterval(() => {
+      const next = audio.volume - decrement;
+      if (next <= 0) {
+        audio.volume = 0;
+        audio.pause();
+        stopFade();
+      } else {
+        audio.volume = next;
+      }
+    }, STEP_MS);
+  }, [stopFade]);
+
+  // Create audio element and fade in on mount
   useEffect(() => {
     if (!enabled || typeof window === "undefined") return;
 
     const audio = new Audio("/audio/session-drone.mp3");
-    audio.loop = true;
-    audio.volume = 0.5;
+    audio.loop   = true;
+    audio.volume = 0;
     audioRef.current = audio;
 
-    audio.play().catch((err) => {
-      // Autoplay may be blocked until a user gesture — session start is a gesture so
-      // this should succeed, but we log silently rather than crashing if not.
-      console.warn("Session audio autoplay blocked:", err);
-    });
+    audio.play()
+      .then(() => fadeIn(audio))
+      .catch((err) => console.warn("Session audio autoplay blocked:", err));
 
     return () => {
+      stopFade();
       audio.pause();
       audio.src = "";
       audioRef.current = null;
     };
-  }, [enabled]);
+  }, [enabled, fadeIn, stopFade]);
 
-  // Pause / resume in sync with session state
+  // React to pause / finish / resume
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    if (isPaused || isFinished) {
+    if (isFinished) {
+      // Fade out and let the interval pause it when volume hits zero
+      fadeOut(audio);
+    } else if (isPaused) {
+      // Immediate pause — no fade
+      stopFade();
       audio.pause();
     } else {
-      audio.play().catch((err) => {
-        console.warn("Session audio play failed:", err);
-      });
+      // Resuming from pause — fade back in
+      audio.play()
+        .then(() => fadeIn(audio))
+        .catch((err) => console.warn("Session audio play failed:", err));
     }
-  }, [isPaused, isFinished]);
+  }, [isPaused, isFinished, fadeIn, fadeOut, stopFade]);
 }
