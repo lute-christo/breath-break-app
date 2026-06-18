@@ -11,6 +11,7 @@ interface EmotionGridProps {
   emotions?: string[];
   isPremium?: boolean;
   grouped?: boolean;
+  quickEmotions?: string[];
 }
 
 export function EmotionGrid({
@@ -18,6 +19,7 @@ export function EmotionGrid({
   emotions = QUICK_EMOTIONS,
   isPremium = false,
   grouped = false,
+  quickEmotions,
 }: EmotionGridProps) {
   const router = useRouter();
 
@@ -30,6 +32,61 @@ export function EmotionGrid({
       `/session?emotion=${encodeURIComponent(emotion)}&mode=${encodeURIComponent(mode)}`
     );
   };
+
+  if (grouped && quickEmotions) {
+    const remaining = emotions.filter((e) => !quickEmotions.includes(e));
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-3 gap-2 text-sm">
+          {quickEmotions.map((emotion) => {
+            const locked = !isPremium && !FREE_EMOTIONS.includes(emotion);
+            return (
+              <button
+                key={emotion}
+                onClick={() => handleSelect(emotion, locked)}
+                className={locked
+                  ? "border border-neutral-800 rounded-md px-2 py-2 text-neutral-600 hover:border-neutral-700 active:scale-[0.99] transition"
+                  : "border border-neutral-700 rounded-md px-2 py-2 hover:border-neutral-400 active:scale-[0.99] transition"
+                }
+              >
+                {emotion.toUpperCase()}
+              </button>
+            );
+          })}
+        </div>
+        {EMOTION_GROUPS.map((group) => {
+          const groupEmotions = group.emotions.filter((e) => remaining.includes(e));
+          if (groupEmotions.length === 0) return null;
+          const freeOnes = groupEmotions.filter((e) => isPremium || FREE_EMOTIONS.includes(e));
+          const lockedOnes = groupEmotions.filter((e) => !isPremium && !FREE_EMOTIONS.includes(e));
+          return (
+            <div key={group.label} className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[0.6rem] uppercase tracking-widest text-neutral-500 font-semibold">
+                  {group.label}
+                </span>
+                <div className="h-px flex-1 bg-neutral-800" />
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                {freeOnes.map((emotion) => (
+                  <button key={emotion} onClick={() => handleSelect(emotion, false)}
+                    className="border border-neutral-700 rounded-md px-2 py-2 hover:border-neutral-400 active:scale-[0.99] transition">
+                    {emotion.toUpperCase()}
+                  </button>
+                ))}
+                {lockedOnes.map((emotion) => (
+                  <button key={emotion} onClick={() => handleSelect(emotion, true)}
+                    className="border border-neutral-800 rounded-md px-2 py-2 text-neutral-600 hover:border-neutral-700 active:scale-[0.99] transition">
+                    {emotion.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   if (grouped) {
     return (

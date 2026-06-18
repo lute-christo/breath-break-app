@@ -218,7 +218,13 @@ export default function HomePage() {
       {/* Emotion grid */}
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-neutral-200">Choose an emotion</h2>
-        <EmotionGrid mode={mode} emotions={ALL_EMOTIONS} isPremium={isPremium} />
+        <EmotionGrid
+          mode={mode}
+          emotions={ALL_EMOTIONS}
+          isPremium={isPremium}
+          grouped
+          quickEmotions={["anxiety", "anger", "grief", "restless"]}
+        />
       </section>
 
       {/* Stats footer + history link */}
