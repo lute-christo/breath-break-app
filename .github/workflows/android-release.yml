@@ -44,7 +44,7 @@ jobs:
       - name: Build signed release AAB
         working-directory: android
         env:
-          KEYSTORE_PATH: app/release.keystore
+          KEYSTORE_PATH: release.keystore
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
