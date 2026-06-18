@@ -163,8 +163,31 @@ class LocalPracticeStore implements PracticeStore {
 // this is what you import elsewhere
 export const practiceStore: PracticeStore = new LocalPracticeStore();
 
-/**
- * Later, when you add Supabase:
- *
- * export const practiceStore: PracticeStore = new SupabasePracticeStore(supabaseClient);
- */
+// ---
+// Migration helper — call this once after a user signs in to Supabase.
+// It reads whatever's in localStorage, hands each session to `writeFn`,
+// then marks migration done so it never reruns.
+//
+// Usage (inside your auth callback):
+//   await migrateLocalSessionsOnLogin(async (sessions) => {
+//     await supabase.from("sessions").upsert(sessions, { onConflict: "id" });
+//   });
+// ---
+const MIGRATION_KEY = "breathbreak_migrated_v1";
+
+export async function migrateLocalSessionsOnLogin(
+  writeFn: (sessions: SessionLog[]) => Promise<void>
+): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (window.localStorage.getItem(MIGRATION_KEY)) return;
+
+  const local = new LocalPracticeStore();
+  const sessions = await local.getSessions();
+  if (sessions.length === 0) {
+    window.localStorage.setItem(MIGRATION_KEY, "1");
+    return;
+  }
+
+  await writeFn(sessions);
+  window.localStorage.setItem(MIGRATION_KEY, "1");
+}
