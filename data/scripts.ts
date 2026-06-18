@@ -739,6 +739,21 @@ export const ALL_EMOTIONS = [
   "hope",
 ];
 
+export const EMOTION_GROUPS = [
+  {
+    label: "CHARGED",
+    emotions: ["anxiety", "anger", "panic", "restless", "frustration", "overwhelm", "jealousy", "excitement", "desire"],
+  },
+  {
+    label: "HEAVY",
+    emotions: ["grief", "exhaustion", "numbness", "hopelessness", "dread", "shame", "guilt", "disappointment", "loneliness", "heartbreak", "resentment", "longing"],
+  },
+  {
+    label: "OPEN",
+    emotions: ["joy", "gratitude", "pride", "love", "relief", "awe", "contentment", "tenderness", "hope"],
+  },
+] as const;
+
 export function getScriptForEmotion(
   emotion: string,
   mode: Mode = "standard"

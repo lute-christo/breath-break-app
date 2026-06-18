@@ -27,7 +27,7 @@ function ModulesInner() {
           </div>
         </div>
 
-        <EmotionGrid mode={mode} emotions={ALL_EMOTIONS} isPremium={isPremium} />
+        <EmotionGrid mode={mode} emotions={ALL_EMOTIONS} isPremium={isPremium} grouped />
       </section>
 
       <BottomNav />
