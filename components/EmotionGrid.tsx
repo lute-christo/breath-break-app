@@ -38,21 +38,15 @@ export function EmotionGrid({
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-3 gap-2 text-sm">
-          {quickEmotions.map((emotion) => {
-            const locked = !isPremium && !FREE_EMOTIONS.includes(emotion);
-            return (
+          {quickEmotions.map((emotion) => (
               <button
                 key={emotion}
-                onClick={() => handleSelect(emotion, locked)}
-                className={locked
-                  ? "border border-neutral-800 rounded-md px-2 py-2 text-neutral-600 hover:border-neutral-700 active:scale-[0.99] transition"
-                  : "border border-neutral-700 rounded-md px-2 py-2 hover:border-neutral-400 active:scale-[0.99] transition"
-                }
+                onClick={() => handleSelect(emotion, false)}
+                className="border border-neutral-700 rounded-md px-2 py-2 hover:border-neutral-400 active:scale-[0.99] transition"
               >
                 {emotion.toUpperCase()}
               </button>
-            );
-          })}
+          ))}
         </div>
         {EMOTION_GROUPS.map((group) => {
           const groupEmotions = group.emotions.filter((e) => remaining.includes(e));
