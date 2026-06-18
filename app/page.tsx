@@ -223,7 +223,7 @@ export default function HomePage() {
           emotions={ALL_EMOTIONS}
           isPremium={isPremium}
           grouped
-          quickEmotions={["anxiety", "anger", "grief", "restless"]}
+          quickEmotions={["anxiety", "anger", "grief", "restless", "gratitude", "pride"]}
         />
       </section>
 

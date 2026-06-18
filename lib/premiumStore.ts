@@ -3,6 +3,9 @@
 const PREMIUM_KEY = "breathbreak_premium";
 const BETA_KEY = "breathbreak_beta_unlock";
 
+// Change this to rotate the beta code whenever needed
+const BETA_CODES = ["BREATHBETA", "BB2024", "TONGLENONME"];
+
 export function isPremium(): boolean {
   if (typeof window === "undefined") return false;
   return (
@@ -32,4 +35,12 @@ export function setPremium(enabled: boolean): void {
   } else {
     localStorage.removeItem(PREMIUM_KEY);
   }
+}
+
+export function redeemCode(code: string): boolean {
+  if (BETA_CODES.includes(code.trim().toUpperCase())) {
+    setBetaUnlock(true);
+    return true;
+  }
+  return false;
 }
