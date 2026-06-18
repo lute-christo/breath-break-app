@@ -11,7 +11,7 @@ export default function PrivacyPage() {
           ← Settings
         </Link>
         <h1 className="text-lg font-semibold pt-2">Privacy Policy</h1>
-        <p className="text-xs text-neutral-500">Last updated: March 2026</p>
+        <p className="text-xs text-neutral-500">Last updated: June 2026</p>
       </header>
 
       <section className="space-y-6 text-sm text-neutral-300 leading-relaxed">
@@ -63,8 +63,25 @@ export default function PrivacyPage() {
             Third-party services
           </h2>
           <p>
-            None currently integrated. If this changes, this policy will be
-            updated before any such integration ships.
+            <strong className="text-neutral-200">Formspree</strong> — If you
+            submit your email address on the Pro waitlist page, that address is
+            sent to Formspree (formspree.io) for storage and delivery to us.
+            Formspree&apos;s own{" "}
+            <a
+              href="https://formspree.io/legal/privacy-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-4 hover:text-neutral-100 transition"
+            >
+              privacy policy
+            </a>{" "}
+            governs that data. To request deletion of a submitted email, contact
+            us at hello@breathbreak.app.
+          </p>
+          <p>
+            No other third-party services are currently integrated. If this
+            changes, this policy will be updated before any such integration
+            ships.
           </p>
         </div>
 
